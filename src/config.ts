@@ -14,7 +14,6 @@ import { http, createConfig } from 'wagmi'
 import { mainnet } from 'wagmi/chains'
 import { arcTestnet } from 'viem/chains'
 import { injected } from 'wagmi/connectors'
-import { registerChain } from './tracing'
 
 // ── Arc Mainnet chain definition ─────────────────────────────────────────────
 // Values sourced from onchain-facts.ts (Arc Studio registry) but defined inline
@@ -42,8 +41,16 @@ const activeChain = IS_MAINNET ? arcMainnet : arcTestnet
 /** Chain ID of the currently configured network (5042002 testnet, 5042 mainnet). */
 export const ACTIVE_CHAIN_ID: number = activeChain.id
 
-// Pre-register chain RPC URLs so trace events show correct chain names immediately
-registerChain(activeChain.id, activeChain.rpcUrls.default.http[0])
+// Pre-register chain RPC URLs so trace events show correct chain names immediately.
+// In production import.meta.env.DEV is false, so this branch is dead-code-eliminated
+// and tracing.ts never enters the production bundle.
+if (import.meta.env.DEV) {
+  // Dynamic import keeps the static analysis happy while still being tree-shaken in prod.
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  import('./tracing').then(({ registerChain }) => {
+    registerChain(activeChain.id, activeChain.rpcUrls.default.http[0])
+  })
+}
 
 export const config = createConfig({
   chains: [activeChain, mainnet], // mainnet needed for ENS resolution

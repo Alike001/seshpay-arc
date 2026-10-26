@@ -10,8 +10,13 @@
  *  https://studio.arc.io
  */
 
-import './tracing'
-import './console-capture'
+// Arc Studio development instrumentation — excluded from production bundles.
+// Vite evaluates import.meta.env.DEV as `false` at build time, dead-code-eliminates
+// the entire branch, and neither tracing.ts nor console-capture.ts reaches dist/.
+if (import.meta.env.DEV) {
+  await import('./tracing')
+  await import('./console-capture')
+}
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
