@@ -349,8 +349,10 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
         Create an event
       </h2>
       <p className="text-sm mb-5 text-pretty" style={{ color: "var(--muted)" }}>
-        Set a host, define your payout amounts, choose an approval deadline, and
-        deposit USDC. You control who gets paid — nothing is released automatically.
+        Set a host, define your payout amounts, and choose an approval deadline.
+        Funding requires <strong>two wallet confirmations</strong>: first to allow
+        the USDC spend, then to create the event and deposit funds.
+        Settlement is a single separate transaction when you're ready to pay out.
       </p>
 
       <div className="space-y-4">

@@ -11,7 +11,6 @@
  */
 import { useAccount } from "wagmi";
 import { useSearchParams } from "react-router-dom";
-import { ConnectKitButton } from "connectkit";
 import { IS_MAINNET, ACTIVE_CHAIN_ID } from "@/config";
 import { requireChain } from "@/onchain-facts";
 import { SESSION_SPLIT } from "@/contracts/sessionSplit";
@@ -39,7 +38,7 @@ function parseTab(raw: string | null): Tab {
 }
 
 export default function App() {
-  const { isConnected } = useAccount();
+  useAccount(); // keep wagmi subscription alive for child components
   const [searchParams, setSearchParams] = useSearchParams();
 
   const tab = parseTab(searchParams.get("tab"));
@@ -61,77 +60,7 @@ export default function App() {
     <div className="min-h-dvh" style={{ background: "var(--bg-gradient)" }}>
       <Header />
 
-      <main className="mx-auto w-full max-w-xl px-4 py-7">
-
-        {/* Hero block */}
-        <section className="mb-7 text-center">
-          <h1
-            className="display text-3xl font-bold mb-2"
-            style={{ color: "var(--ink)", letterSpacing: "-0.03em" }}
-          >
-            Fund a session.{" "}
-            <span style={{ color: "var(--accent-hover)" }}>Pay your people.</span>
-          </h1>
-          <p
-            className="text-sm text-pretty max-w-xs mx-auto"
-            style={{ color: "var(--muted)" }}
-          >
-            Sponsor-controlled USDC payouts for creators, workshops, and communities on Arc.
-          </p>
-
-          {!isConnected && (
-            <div className="mt-5 flex justify-center">
-              <ConnectKitButton />
-            </div>
-          )}
-        </section>
-
-        {/* How it works — only shown before wallet connect */}
-        {!isConnected && (
-          <section className="mb-7 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {[
-              {
-                num: "1",
-                title: "Create an event",
-                body: "Set a host payout, a contributor reward budget, and an approval deadline.",
-              },
-              {
-                num: "2",
-                title: "Approve payouts",
-                body: "You decide who gets paid. Up to 5 contributors, exact amounts, all at once.",
-              },
-              {
-                num: "3",
-                title: "Funds settle instantly",
-                body: "Host and contributors receive USDC on-chain the moment you approve.",
-              },
-            ].map((step) => (
-              <div
-                key={step.num}
-                className="rounded-2xl p-4 text-left"
-                style={{
-                  background: "rgba(255,255,255,0.65)",
-                  border: "1px solid rgba(18,45,69,0.08)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                }}
-              >
-                <div
-                  className="display inline-flex size-6 items-center justify-center rounded-lg text-xs font-bold text-white mb-3"
-                  style={{ background: "var(--accent)" }}
-                >
-                  {step.num}
-                </div>
-                <p className="text-sm font-semibold mb-1" style={{ color: "var(--ink)" }}>
-                  {step.title}
-                </p>
-                <p className="text-xs text-pretty" style={{ color: "var(--muted)" }}>
-                  {step.body}
-                </p>
-              </div>
-            ))}
-          </section>
-        )}
+      <main className="mx-auto w-full max-w-xl px-4 pt-5 pb-7">
 
         {/* Tab bar */}
         <div

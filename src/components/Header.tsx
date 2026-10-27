@@ -1,5 +1,6 @@
 import { ConnectKitButton } from "connectkit";
 import { Link } from "react-router-dom";
+import { IS_MAINNET } from "@/config";
 
 export default function Header() {
   return (
@@ -41,9 +42,9 @@ export default function Header() {
               </span>
               <span
                 className="text-[10px] font-medium hidden sm:block"
-                style={{ color: "var(--subtle)" }}
+                style={{ color: IS_MAINNET ? "var(--success)" : "var(--subtle)" }}
               >
-                on Arc Testnet
+                {IS_MAINNET ? "on Arc Mainnet" : "on Arc Testnet"}
               </span>
             </div>
           </Link>
