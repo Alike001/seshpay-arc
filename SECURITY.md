@@ -38,25 +38,19 @@ The repository includes 162 passing automated tests (16 Foundry + 146 Bun tests,
 
 ## Reporting a vulnerability
 
-### Private GitHub vulnerability reporting — currently disabled
+### Private GitHub vulnerability reporting — enabled
 
-GitHub's built-in Private Vulnerability Reporting feature is not currently enabled on this repository. There is no "Report a vulnerability" button in the Security tab.
+GitHub's built-in Private Vulnerability Reporting is **enabled** on this repository (verified 2026-10-27). Researchers can submit confidential reports without creating a public issue.
 
-**If you are the repository owner and want to enable it:**
-1. Go to [github.com/Alike001/seshpay-arc/settings/security\_analysis](https://github.com/Alike001/seshpay-arc/settings/security_analysis)
-2. Under "Private vulnerability reporting", click **Enable**.
+**To report a vulnerability:**
 
-Once enabled, contributors can report vulnerabilities privately through GitHub without creating a public issue.
+1. Go to the **Security** tab of [github.com/Alike001/seshpay-arc](https://github.com/Alike001/seshpay-arc).
+2. Click **"Report a vulnerability"** (visible under Security > Advisories).
+3. Fill in the advisory form: affected component, steps to reproduce, potential impact, and any suggested fix.
+4. Submit the draft. It is only visible to you and the repository maintainer.
+5. The maintainer will review and respond through the private advisory thread.
 
-### Until private reporting is enabled
-
-If you discover a suspected vulnerability, please **do not open a public GitHub issue**. Instead:
-
-1. Create a **draft GitHub security advisory** by navigating to:
-   `https://github.com/Alike001/seshpay-arc/security/advisories/new`
-   This form is available even without the private reporting feature enabled and keeps the report confidential.
-2. Describe the vulnerability in detail: affected component, reproduction steps, potential impact, and any suggested fix.
-3. The maintainer will review the draft and respond through the advisory thread.
+Please **do not open a public GitHub issue** to report a suspected vulnerability. Public disclosure before a fix is in place puts users at risk.
 
 ---
 
