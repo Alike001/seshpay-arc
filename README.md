@@ -267,13 +267,16 @@ Contributions are welcome. The project uses Bun as its package manager and Found
 
 Please do not submit pull requests that modify `SessionSplit.sol`, the ABI, or the deployed contract address without first opening an issue to discuss the change.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution guide and [SECURITY.md](SECURITY.md) for the vulnerability disclosure policy.
+
 ---
 
 ## License
 
-`SessionSplit.sol` is released under the [MIT License](https://spdx.org/licenses/MIT.html) (SPDX identifier `MIT` in the contract source).
+This project is released under the [MIT License](LICENSE).
 
-The remainder of the repository (frontend application, scripts, and documentation) does not currently include a separate license file. All rights reserved unless otherwise noted.
+The `contracts/SessionSplit.sol` source file carries an MIT SPDX identifier consistent with the root `LICENSE` file.
+Copyright (c) 2026 Alike001.
 
 ---
 
