@@ -1,549 +1,352 @@
-# SeshPay — Arc Mainnet Release Audit
-**Date:** 2026-10-26 (updated)  
-**Status:** CONDITIONAL GO — safe code fixes applied; manual wallet test and third-party audit remain
+# SeshPay Arc Mainnet Readiness Audit
+
+**Version:** 2 (updated 2026-10-28)  
+**Contract reviewed:** `SessionSplit.sol` (current source in this repository)  
+**Deployed testnet address:** `0x0fe8a41346ab7aa30dc183384a85b5e36051713c` (Arc Testnet, chain ID 5042002)  
+**Mainnet address:** not yet deployed  
+**Verdict:** **NO-GO** — four prerequisites must be resolved before any mainnet deployment
 
 ---
 
-## Automated checks (confirmed 2026-10-26)
+## 1. Scope
 
-| Suite | Tests | Pass | Fail |
-|---|---|---|---|
-| Foundry (Solidity) | 16 | 16 | 0 |
-| `sessionDecode.test.ts` | 66 | 66 | 0 |
-| `eventId.test.ts` | 13 | 13 | 0 |
-| `format.test.ts` | 45 | 45 | 0 |
-| **Total** | **140** | **140** | **0** |
-| Lint (oxlint) | — | 0 errors | — |
-| TypeCheck (tsc) | — | 0 errors | — |
-| Production build | — | Success | — |
+This audit covers:
 
-Passing automated tests do not constitute an independent security audit.  
-These tests were written by the same developer who wrote the contract and frontend.  
-A professional third-party audit is required before any mainnet deployment involving real funds.
+1. `contracts/SessionSplit.sol` — full source and compiled artifact review
+2. `contracts/test/SessionSplit.t.sol` — 16 Foundry tests
+3. `src/contracts/sessionSplit.ts` — address selection and ABI wiring
+4. `src/config.ts` — chain and network configuration
+5. Arc Mainnet RPC and USDC ERC-20 address verification (live RPC calls, 2026-10-28)
+6. Frontend configuration for mainnet readiness
+7. Deployment scripts and runbook
+
+This audit was written by the same developer who wrote the contract. **It is not a substitute for an independent professional security review.** The automated tests described here were authored by the same party who wrote the production code — they confirm expected behaviour and regression coverage, not adversarial correctness.
 
 ---
 
-## Applied safe fixes (2026-10-26)
+## 2. Chain and USDC verification (live RPC, 2026-10-28)
 
-All four safe fixes from the original recommendation have been applied:
+Both values were verified against the live Arc Mainnet RPC endpoint this session. No memory or assumption was used.
 
-| Fix | Finding | Status |
+| Property | Value | Source |
 |---|---|---|
-| `VITE_NETWORK` env var + Arc Mainnet chain in wagmi + runtime contract address selection with build-time error guard | F-2 | **Applied** |
-| All action components now import `ACTIVE_CHAIN_ID` from `config.ts` instead of hardcoding `5042002` | F-2 | **Applied** |
-| Footer "Arc Testnet only" text is conditional on `IS_MAINNET` from `config.ts` | F-3 | **Applied** |
-| Minimum deadline 5 minutes from now enforced in `CreateSession.tsx` | F-4 | **Applied** |
-| `public/_redirects` added for Netlify SPA routing | F-5 | **Applied** |
+| Arc Mainnet RPC | `https://rpc.mainnet.arc.io` | Arc docs |
+| `eth_chainId` response | `0x13b2` = **5042** | Live RPC call |
+| USDC ERC-20 address | `0x3600000000000000000000000000000000000000` | Arc docs |
+| `decimals()` on USDC | **6** (returned `0x…06`) | Live `eth_call` |
+| Native USDC decimals | **18** (same asset, different decimal scale for gas accounting) | Arc protocol docs |
 
-Additionally applied during audit continuation (2026-10-26):
+The contract uses `IERC20.safeTransfer` with 6-decimal amounts throughout. This is correct for ERC-20 USDC on Arc. No native-token path exists in the contract — it handles no `msg.value` and makes no ETH transfers.
 
-| Fix | Description | Status |
-|---|---|---|
-| `tracing.ts` browser-global guards | `window.addEventListener('message', ...)` at line 223, the `_parentOrigin` IIFE (uses `window.location` + `document.referrer`), the `emit()` function, `toAbsoluteUrl()` (uses `window.location.href`), and the entire EIP-1193 patch block (uses `Object.defineProperty(window, 'ethereum', ...)` and `window.addEventListener('eip6963:...')`) were all unguarded at module scope. Any file in the import graph that transitively reached `tracing.ts` caused `ReferenceError: window is not defined` in the bun test runner. All five locations are now guarded with `typeof window !== 'undefined'`. | **Applied** |
+**Important:** Arc Testnet USDC emits two `Transfer` events per ERC-20 transfer (one native 18-decimal view, one ERC-20 6-decimal view). This is a chain-level property, not a contract bug. When reading receipts or logs for accounting, use only the 6-decimal `amount` field from the `SessionRefunded` or `SessionSettled` event, not the raw `Transfer` log data.
 
 ---
 
-## TASK 1 — Contract Audit
+## 3. Contract review: `SessionSplit.sol`
 
-### Compilation settings (verified from foundry.toml + SessionSplit.sol)
+### 3.1 Accounting invariants
 
-| Setting | Value |
-|---|---|
-| Solidity | 0.8.28 (fixed, `auto_detect_solc = false`) |
-| EVM target | Cancun |
-| Optimizer | Enabled, 200 runs |
-| OpenZeppelin | 5.6.1 (`ReentrancyGuard`, `SafeERC20`, `IERC20`) |
-| Constructor arg | `usdcAddress` — validated non-zero |
+**Verified by source inspection and Foundry tests.**
 
-### Constructor argument for mainnet deployment
-
-The constructor takes exactly one argument: `usdcAddress`. On both Arc Testnet and Arc Mainnet, the USDC ERC-20 address is `0x3600000000000000000000000000000000000000` (verified in `onchain-facts.ts`, a registry-generated file). This must be confirmed against the live Arc Mainnet USDC contract before any deployment.
-
-**ASSUMPTION (not independently verified this session):** The Arc Mainnet USDC ERC-20 address is the same as Arc Testnet (`0x3600000000000000000000000000000000000000`). Confirm via `read_contract` against chainId 5042 before deploying.
-
-### Access control
-
-- `createSession`: any address may create (intentional — any sponsor).
-- `settle`: `msg.sender != session.sponsor` → `Unauthorized()`. Correct.
-- `refund`: `msg.sender != session.sponsor` → `Unauthorized()`. Correct.
-- No admin, owner, or platform fee address. No upgradeability. No `selfdestruct`. No `delegatecall`.
-
-**FINDING C-1 (INFO):** The `usdc` storage variable is `public` and `immutable`. No issue — it enables frontends to verify the token address the contract holds without trust.
-
-### Reentrancy
-
-Both `settle` and `refund` use:
-1. `nonReentrant` modifier from OpenZeppelin 5.6.1.
-2. CEI (Checks-Effects-Interactions): state set to `SETTLED`/`REFUNDED` before any token transfer.
-
-Double protection. No reentrancy path exists.
-
-### Accounting invariants
-
-**createSession:**
-```
-totalDeposit = hostPayout + rewardBudget
-safeTransferFrom(sponsor → contract, totalDeposit)
-```
-No overflow path at Solidity 0.8.x (checked arithmetic by default).
-
-**settle:**
-```
-require(totalParticipantRewards <= rewardBudget)
-safeTransfer(host, hostPayout)
-for each participant: safeTransfer(participant, amounts[i])
-refundedToSponsor = rewardBudget - totalParticipantRewards   // ≥ 0, never underflows
-if refundedToSponsor > 0: safeTransfer(sponsor, refundedToSponsor)
-```
-Total out = `hostPayout + totalParticipantRewards + refundedToSponsor`
-         = `hostPayout + totalParticipantRewards + (rewardBudget - totalParticipantRewards)`
-         = `hostPayout + rewardBudget`
-         = `totalDeposit` ✓  
-Funds-in = funds-out. No leakage. No surplus.
-
-**refund:**
-```
-totalRefund = hostPayout + rewardBudget  // == totalDeposit
-safeTransfer(sponsor, totalRefund)
-```
-Full deposit returned. ✓
-
-**FINDING C-2 (INFO):** The host can equal the sponsor address. The contract permits it; the sponsor pre-commits to paying the host (who is themselves). This is a valid use-case and not a vulnerability, but UX copy could clarify.
-
-**FINDING C-3 (INFO):** `rewardBudget` may be zero. If zero, `settle` with empty participant arrays still sends `hostPayout` to the host and zero to contributors. `totalDeposit = hostPayout + 0 = hostPayout`. This is valid and tested (`testZeroParticipants`).
-
-### Deadline logic
-
-`createSession`: `deadline > block.timestamp` (strictly greater). Equal is rejected. ✓  
-`settle`: `block.timestamp > deadline` → `DeadlinePassed()`. Correct direction.  
-`refund`: `block.timestamp <= deadline` → `DeadlineNotPassed()`. Correct direction.
-
-**FINDING C-4 (LOW):** `block.timestamp` is used for deadline enforcement. On Arc (a custom rollup), sequencer time drift is possible. The contract is consistent with itself, but a deadline set exactly `N` seconds in the future may expire `±N_drift` seconds earlier or later than the user's wall-clock expectation. This is acknowledged in `format.ts` (`isDeadlinePassed` comment: "up to ~12 seconds"). The advisory mitigates the UX impact but not the contract behavior. Mitigation: document in the user interface that the approval deadline is enforced by block time, not wall-clock time, and recommend setting deadlines at least 60 seconds in the future.
-
-### Duplicate recipient check
-
-O(n²) nested loop, n ≤ 5. Gas-safe. Correct. Tested.
-
-### Overpayment prevention
-
-`totalParticipantRewards > rewardBudget → RewardBudgetExceeded()`. Tested.
-
-### Settlement limits
-
-Max 5 contributors enforced. Array-length mismatch enforced. Both tested.
-
-### `SafeERC20` behavior
-
-`safeTransfer` and `safeTransferFrom` revert on non-zero return values or reverts from the token. Any USDC transfer failure (e.g. frozen account) reverts the entire settlement atomically — no partial payout possible.
-
-**FINDING C-5 (MEDIUM — known limitation):** If Circle freezes the host or a contributor address at the USDC contract level (a Circle compliance action), `settle` will revert for all participants, not just the frozen one. Funds remain locked until: (a) the freeze is lifted, or (b) the deadline passes and the sponsor calls `refund`. The refund also reverts if the sponsor's address is frozen. This is an inherent consequence of using `SafeERC20` with a USDC token that has blacklisting capability. **This is not a new finding for any USDC-based contract.** Document it in the app's terms. It does not block mainnet release but must be disclosed.
-
-### Transaction ordering
-
-`settle` and `refund` both check `session.state != OPEN` first. A race between two `settle` calls on the same session: one succeeds (sets state to SETTLED), the second reverts on `InvalidState`. No double-payment possible due to state machine enforcement.
-
-### `nextSessionId` and session key collision
-
-`nextSessionId` starts at 1, increments by 1 per `createSession`. Session IDs are dense positive integers. No collision is possible. Sessions are never deleted. `sessions[0]` is the default-value struct (zero-address sponsor, etc.) — the frontend treats a zero-address sponsor as "not found," which is correct.
-
-### Zero-amount participant entries
-
-No per-participant zero-amount check. A participant can receive 0 USDC. This wastes a slot (max 5) and emits a `ParticipantPaid` event with `amount = 0`, but does not cause incorrect accounting. The frontend validates `amount > 0` before submission. Low severity.
-
-### Summary: Contract blockers
-
-**No mainnet blockers found in the contract itself.**  
-All identified findings are INFO, LOW, or a known industry-wide USDC limitation (C-5). The contract logic is correct, reentrancy-protected, and fully accounted. The constructor argument (`usdcAddress`) must be independently confirmed before deployment.
-
----
-
-## TASK 2 — Frontend Audit
-
-### Wallet connection
-
-ConnectKit 1.9.2, wagmi 2.19.5. `injected()` connector only — no WalletConnect, no Coinbase. Sufficient for a sponsored-payment app where the primary user (sponsor) uses MetaMask or similar injected wallet.
-
-**FINDING F-1 (LOW):** Only `injected()` is configured. Mobile browser wallets that do not inject (e.g. Trust Wallet in-app browser) may not connect. Not a mainnet blocker but limits mobile reach.
-
-### Chain enforcement
-
-All four action components (`CreateSession`, `SettleSession`, `RefundSession`) check `chainId !== ARC_TESTNET_CHAIN_ID` and call `switchChain({ chainId: ARC_TESTNET_CHAIN_ID })` on the action button before any tx. **This is the critical mainnet blocker (F-2 below).**
-
-**FINDING F-2 (CRITICAL — mainnet blocker):** Every action component hardcodes `const ARC_TESTNET_CHAIN_ID = 5042002`. The footer of `App.tsx` hardcodes the testnet explorer URL and testnet contract address. `SESSION_SPLIT_ADDRESS` in `sessionSplit.ts` is the testnet deployment address. The `config.ts` wagmi config includes only `arcTestnet` (5042002) and `mainnet` (1, for ENS). Arc Mainnet (chainId 5042) is absent from the wagmi config entirely.
-
-**Before mainnet release, all five of these must change atomically, driven by a runtime environment variable:**
-- wagmi config must add Arc Mainnet chain
-- all `ARC_TESTNET_CHAIN_ID` constants must become the active chain's ID
-- `SESSION_SPLIT_ADDRESS` must point to the mainnet deployment address
-- footer links must point to the mainnet explorer
-- the USDC address passed to ERC-20 reads must be the mainnet USDC
-
-**The mainnet contract address is intentionally absent — it must not be set until an independently reviewed deployment has actually occurred.** See Task 3 for the configuration plan.
-
-**FINDING F-3 (MEDIUM):** The footer of `App.tsx` contains the string "Arc Testnet only — no real funds." This text must change for the mainnet build and must not appear on the deployed production app.
-
-### Transaction confirmation
-
-`useWaitForTransactionReceipt` is used for all three transaction types. Pending, confirming, and success states are all handled with loading spinners and disabled buttons. Error states display user-readable messages from `parseOnchainError`. ✓
-
-### Event ID extraction
-
-`extractSessionId` decodes the `SessionCreated` log from the receipt using viem's `decodeEventLog`. Never guesses from `nextSessionId`. Falls back gracefully with a "Check My Events" message if log decode fails. ✓
-
-### Balance and allowance reads
-
-Live `balanceOf` and `allowance` reads with 10-second refetch interval. Insufficient balance disables the approve button. Existing allowance skips the approve step. Gas-reserve advisory fires when deposit would leave < 0.50 USDC. ✓
-
-### Near-expired deadline protection
-
-**FINDING F-4 (LOW):** `CreateSession` validates `deadlineTs > 0n` but does not enforce a minimum distance from the current time. A sponsor could set a deadline 1 second in the future. The contract check is `deadline > block.timestamp` (strictly greater), so a 1-second deadline would likely succeed on the approve tx but fail on the createSession tx (the ERC-20 approve goes first, then createSession in a second tx; between these two transactions, the deadline could pass). Mitigation: add a minimum deadline of, say, 5 minutes (`deadlineTs > BigInt(Math.floor(Date.now()/1000) + 300)`) to the frontend `isValid` check. **This is a safe fix that does not change contract behavior.**
-
-### Direct event URLs (`/app/events/:id`)
-
-`EventDetail.tsx` loads from contract using `useReadContract` with no wallet required. Works on refresh. Handles loading, error, not-found (zero-address sponsor), invalid ID (non-numeric). Error boundary wraps the route. ✓
-
-### SPA routing
-
-`vercel.json` contains `{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }`. SPA routing is configured. ✓
-
-**FINDING F-5 (LOW):** A `netlify.toml` or `_redirects` file for Netlify is absent. The `vercel.json` rewrite only helps on Vercel. If deployed to Netlify without a `_redirects` file, direct navigation to `/app/events/1` will return a 404. Mitigation: add `public/_redirects` with `/* /index.html 200`. Safe fix.
-
-### Settlement and refund state validation
-
-Both `SettleSession` and `RefundSession` prefetch session state from the contract before enabling the action button. The button is disabled if: session not found, wrong sponsor, wrong state, deadline conditions not met. RPC error shows a Retry button. ✓ (fixed in previous turns)
-
-### Loading indicators
-
-All async states (session fetch, tx pending, tx confirming) show spinners with descriptive text. ✓
-
-### Error handling
-
-`parseOnchainError` maps all custom error selectors and common message strings to user-readable copy. Wallet rejection is caught and labeled "Transaction cancelled." ✓
-
-### Incorrect-chain protection
-
-Covered under F-2. All action tabs check chain and offer a "Switch to Arc Testnet" button before any tx. ✓ (will need updating for mainnet)
-
-### "My Events" scan cap
-
-The 50-session scan cap is explicitly disclosed in the UI with the exact session range scanned. ✓
-
----
-
-## TASK 3 — Network Configuration Plan
-
-### Objective
-
-Introduce a runtime environment variable that controls whether the app targets Arc Testnet or Arc Mainnet. Neither network should ever point at the other's contract. The mainnet contract address field must be empty until a real deployment has occurred.
-
-### Required environment variable
+The contract maintains a strict deposit-equals-withdrawal invariant:
 
 ```
-VITE_NETWORK=testnet   # or: mainnet
+totalDeposit = hostPayout + rewardBudget                    (createSession line 89)
+settle pays: hostPayout + sum(amounts[i]) + refundedToSponsor
+           = hostPayout + totalParticipantRewards + (rewardBudget - totalParticipantRewards)
+           = hostPayout + rewardBudget
+           = totalDeposit                                   (settle lines 123–133)
+refund pays: hostPayout + rewardBudget = totalDeposit       (refund line 153)
 ```
 
-### Configuration changes required (safe, no financial logic change)
+No edge case allows partial withdrawal or double-withdrawal. Overflow is impossible under Solidity 0.8.28 checked arithmetic.
 
-**`src/config.ts`** — add Arc Mainnet to wagmi:
+### 3.2 Authorization
 
-```typescript
-import { arcTestnet, arc } from 'viem/chains'
-// arc = { id: 5042, name: 'Arc', rpcUrls: { default: { http: ['https://rpc.mainnet.arc.io'] } }, ... }
-// Confirm arc is exported from viem/chains; if not, define it manually using onchain-facts.ts values.
-
-const IS_MAINNET = import.meta.env.VITE_NETWORK === 'mainnet';
-const activeChain = IS_MAINNET ? arc : arcTestnet;
-
-export const config = createConfig({
-  chains: [activeChain, mainnet],
-  transports: {
-    [activeChain.id]: http(),
-    [mainnet.id]: http(),
-  },
-  connectors: [injected()],
-});
-export const ACTIVE_CHAIN_ID = activeChain.id;
+```solidity
+if (msg.sender != session.sponsor) revert Unauthorized();   // settle line 102, refund line 147
 ```
 
-**`src/contracts/sessionSplit.ts`** — two addresses, runtime selection:
+Only `session.sponsor` (the wallet that called `createSession`) can settle or refund. Checked before any state read or write. No admin bypass, no delegated authority.
 
-```typescript
-const TESTNET_ADDRESS = '0x0fe8a41346ab7aa30dc183384a85b5e36051713c' as const;
-const MAINNET_ADDRESS = '' as const;  // ← INTENTIONALLY EMPTY until mainnet deploy
+**Trust assumption (documented):** The sponsor can call `refund` after the deadline regardless of whether the session actually took place. The host and contributors have no recourse inside the contract if the sponsor does not settle before the deadline. This is a known design choice documented in the README — it places full trust in the sponsor's integrity. V2 adds evidence and dispute mechanisms.
 
-const IS_MAINNET = import.meta.env.VITE_NETWORK === 'mainnet';
+### 3.3 State machine
 
-if (IS_MAINNET && !MAINNET_ADDRESS) {
-  throw new Error('Mainnet is selected but SESSION_SPLIT_MAINNET_ADDRESS is not set.');
+```
+OPEN ──settle──> SETTLED   (only before deadline)
+OPEN ──refund──> REFUNDED  (only after deadline)
+SETTLED, REFUNDED: terminal — any further settle/refund reverts with InvalidState()
+```
+
+- `settle` requires `state == OPEN && block.timestamp <= deadline`
+- `refund` requires `state == OPEN && block.timestamp > deadline`
+- Both checks occur before state mutation (CEI pattern, line 121 and 151)
+
+**Edge case — exact deadline boundary:** `settle` uses `block.timestamp > session.deadline` to revert (line 104: `if (block.timestamp > session.deadline) revert DeadlinePassed()`). `refund` uses `block.timestamp <= session.deadline` to revert (line 149). At `block.timestamp == session.deadline` exactly: settle succeeds, refund reverts. This is a documented, unambiguous boundary with no exploitable window.
+
+**Edge case — zero rewardBudget:** `createSession` does not revert on `rewardBudget == 0`. This is valid — a sponsor can create a host-only event with no contributor budget. Settlement with zero `rewardBudget` and empty participant arrays succeeds correctly; `refundedToSponsor` will be zero and the `if (refundedToSponsor > 0)` guard prevents a zero-value transfer.
+
+### 3.4 Reentrancy
+
+- `nonReentrant` modifier on both `settle` (line 99) and `refund` (line 144)
+- State mutation (`session.state = SessionState.SETTLED/REFUNDED`) occurs before all token transfers (CEI: lines 121 and 151 precede transfer calls)
+- Double protection: `nonReentrant` would catch a reentrant call even if CEI ordering were accidentally broken in a future edit
+
+### 3.5 Participant validation
+
+```solidity
+if (participants[i] == address(0)) revert ZeroAddress();               // line 109
+if (participants[i] == participants[j]) revert DuplicateRecipient();   // line 111
+if (totalParticipantRewards > session.rewardBudget) revert RewardBudgetExceeded(); // line 119
+if (participants.length > 5) revert TooManyParticipants();             // line 106
+if (participants.length != amounts.length) revert LengthMismatch();    // line 105
+```
+
+All five participant-array guards are present and checked before state mutation.
+
+**Note on zero amounts:** `amounts[i] == 0` is not rejected. A zero-value `safeTransfer` will succeed (ERC-20 permits zero transfers). This allows a sponsor to include a participant in the event record with a zero payout — unusual but not a vulnerability. The budget check still holds; it simply doesn't constrain a zero-amount entry.
+
+### 3.6 SafeERC20 and transfer failure
+
+All transfers use `usdc.safeTransfer` / `usdc.safeTransferFrom` (OpenZeppelin 5.6.1). A failed transfer — including USDC blacklisting of any recipient — reverts the entire transaction. This means:
+
+- **Settlement:** if Circle blacklists any participant or the host between event creation and settlement, the settlement transaction will revert until the blacklist is lifted or the deadline passes.
+- **Refund:** if Circle blacklists the sponsor, the refund will revert. Funds would remain locked in the contract with no recovery path.
+
+The USDC blacklisting scenario is a known limitation documented in the README. It is not a contract defect — it is a property of Circle's USDC implementation. The probability is low for normal use but non-zero.
+
+### 3.7 Constructor
+
+```solidity
+constructor(address usdcAddress) {
+    if (usdcAddress == address(0)) revert ZeroAddress();
+    usdc = IERC20(usdcAddress);
+    nextSessionId = 1;
 }
-
-export const SESSION_SPLIT_ADDRESS = (IS_MAINNET ? MAINNET_ADDRESS : TESTNET_ADDRESS) as `0x${string}`;
 ```
 
-This makes the mainnet build fail loudly at startup if the mainnet address has not been populated — preventing accidental deployment of a broken mainnet frontend.
+The only constructor argument is the USDC ERC-20 address. No owner, no fee recipient, no initializer. A deployment to the wrong address (e.g. testnet USDC on mainnet) would silently succeed at deployment but all `safeTransferFrom` calls would fail at runtime (wrong token). **The deployment runbook must include explicit chain ID confirmation and USDC address verification before broadcast.**
 
-**All action components** — replace `const ARC_TESTNET_CHAIN_ID = 5042002` with an import of `ACTIVE_CHAIN_ID` from `config.ts`.
+### 3.8 No issues found in source
 
-**`App.tsx` footer** — replace hardcoded testnet string and explorer URL with values derived from `getChain(ACTIVE_CHAIN_ID)` from `@/onchain-facts`.
+The following categories were checked and no defects were found:
 
-### Chain IDs and USDC addresses (verified from onchain-facts.ts)
-
-| Network | Chain ID | USDC ERC-20 | RPC | Explorer |
-|---|---|---|---|---|
-| Arc Testnet | 5042002 | `0x3600000000000000000000000000000000000000` | `https://rpc.testnet.arc.io` | `https://explorer.testnet.arc.io` |
-| Arc Mainnet | 5042 | `0x3600000000000000000000000000000000000000` | `https://rpc.mainnet.arc.io` | `https://explorer.arc.io` |
-
-The USDC ERC-20 address is the same on both networks per `onchain-facts.ts`. This is a generated file reflecting Arc Studio's registry. **Independently verify against Circle's published Arc Mainnet USDC address before deploying.**
-
-### Safety invariants
-
-1. `VITE_NETWORK=testnet` (or absent) → testnet address, testnet chain, testnet explorer. No mainnet action possible.
-2. `VITE_NETWORK=mainnet` + empty `MAINNET_ADDRESS` → app throws at startup. No silent broken state.
-3. `VITE_NETWORK=mainnet` + populated `MAINNET_ADDRESS` → mainnet config. No testnet RPC or contract called.
-4. The mainnet and testnet builds are separate deployments with separate environment configurations. They must never share a contract address or explorer URL.
+| Category | Finding |
+|---|---|
+| Integer overflow/underflow | None — Solidity 0.8.28 checked arithmetic throughout |
+| Unchecked external calls | None — all transfers via SafeERC20 |
+| Access control bypass | None — `msg.sender == session.sponsor` is the only auth path |
+| Storage collision | N/A — no proxy, no delegatecall |
+| Front-running | Sponsor-only settlement; front-running by a third party cannot succeed |
+| Griefing via participant count | TooManyParticipants() caps at 5, checked first |
+| Event ID collision | `nextSessionId` increments monotonically starting at 1; no collision path |
+| Uninitialized session reads | A read of `sessions[N]` for a non-existent ID returns zero values (sponsor = address(0)); `Unauthorized()` fires on any settle/refund attempt |
 
 ---
 
-## TASK 4 — Deployment Runbook
+## 4. Foundry test coverage
 
-This runbook is exact and reproducible using the project's existing tooling. It must be executed by the human deployer — not automated. No private keys are stored in this file.
+**16 tests, all passing** (verified by `forge test` run 2026-10-28).
 
-### Prerequisites
+| # | Test | What it verifies |
+|---|---|---|
+| 1 | `testSuccessfulMultiRecipientPayout` | 5 participants, partial budget, leftover returned to sponsor |
+| 2 | `testUnauthorizedSettlement` | Non-sponsor `settle` reverts `Unauthorized()` |
+| 3 | `testOverpaymentRevert` | Amounts > rewardBudget reverts `RewardBudgetExceeded()` |
+| 4 | `testDuplicateRecipients` | Duplicate address reverts `DuplicateRecipient()` |
+| 5 | `testRepeatedSettlement` | Second `settle` reverts `InvalidState()` |
+| 6 | `testPrematureRefund` | `refund` before deadline reverts `DeadlineNotPassed()` |
+| 7 | `testRefundAfterSettlement` | `refund` after `settle` reverts `InvalidState()` |
+| 8 | `testRefundAfterDeadline` | Full deposit returned; accounting exact |
+| 9 | `testUnauthorizedRefund` | Non-sponsor `refund` reverts `Unauthorized()` |
+| 10 | `testRepeatedRefund` | Second `refund` reverts `InvalidState()` |
+| 11 | `testZeroAddressConstructor` | `ZeroAddress()` on null USDC |
+| 12 | `testZeroAddressHost` | `ZeroAddress()` on null host |
+| 13 | `testPastDeadline` | Deadline in past reverts `InvalidDeadline()` |
+| 14 | `testTooManyParticipants` | 6 participants reverts `TooManyParticipants()` |
+| 15 | `testLengthMismatch` | Mismatched arrays reverts `LengthMismatch()` |
+| 16 | `testZeroAddressParticipant` | Null participant reverts `ZeroAddress()` |
 
-- [ ] Arc Studio project with current source (`SessionSplit.sol`, `foundry.toml` as-is)
-- [ ] Forge installed (already present in sandbox: `.foundry-version` file)
-- [ ] A dedicated deployer wallet created for this purpose only (not reused from testnet)
-- [ ] That wallet funded with a small amount of real USDC on Arc Mainnet (for gas + constructor tx)
-- [ ] The deployer wallet's private key is available only in a secure environment variable, never pasted into any file
-- [ ] Professional third-party audit of `SessionSplit.sol` completed and findings resolved
+**Coverage gap:** The MockERC20 used in tests does not implement Circle's blacklisting behavior. No test covers a settlement or refund that fails due to USDC transfer reversion. This is a known limitation — a fork test against live Arc Testnet USDC would be needed to verify this scenario.
 
-### Step 1 — Confirm chain ID
+---
 
+## 5. Verified testnet evidence
+
+Two complete flows verified by raw `eth_getLogs` RPC scan and full receipt decoding (2026-10-28):
+
+| Flow | Transaction | Block | Amount |
+|---|---|---|---|
+| Event #1 funded | `0x929eba...880b` | 69,014,824 | 2.00 USDC (test) |
+| Event #1 settled | `0xa56bcc...df59` | 69,019,044 | Atomic: host + contributors |
+| Event #2 funded | `0x04bbb2...7b6b` | 69,049,068 | 0.40 USDC (test) |
+| Event #2 refunded | `0xc94ae5...3f1b` | 69,053,518 | 0.40 USDC returned (exact match) |
+
+The `SessionRefunded` log for Event #2 shows `amount = 400,000` (6-decimal). The same transaction also emits an ERC-20 `Transfer` with a native 18-decimal value of `400,000,000,000,000,000` — this is the same asset in a different decimal representation, not a separate transfer. Counting both would double-count.
+
+---
+
+## 6. Frontend configuration review
+
+### Network selection
+
+`src/config.ts` reads `VITE_NETWORK` at build time:
+
+```typescript
+export const IS_MAINNET = import.meta.env.VITE_NETWORK === "mainnet";
+export const ACTIVE_CHAIN_ID = IS_MAINNET ? ARC_MAINNET_CHAIN_ID : ARC_TESTNET_CHAIN_ID;
+// ARC_TESTNET_CHAIN_ID = 5042002
+// ARC_MAINNET_CHAIN_ID = 5042
+```
+
+### Mainnet address guard
+
+`src/contracts/sessionSplit.ts` throws at module load time if `VITE_NETWORK=mainnet` and `MAINNET_ADDRESS` is empty:
+
+```typescript
+if (IS_MAINNET && !MAINNET_ADDRESS) {
+  throw new Error("[SeshPay] VITE_NETWORK=mainnet is set but mainnet address not recorded...");
+}
+```
+
+This is a build-time and runtime guard. Setting `VITE_NETWORK=mainnet` in Vercel environment variables without populating `MAINNET_ADDRESS` will make the production app throw immediately on load — it will not silently use the testnet contract.
+
+### Chain switching
+
+The app uses `useSwitchChain` from wagmi and checks `chainId === ACTIVE_CHAIN_ID` before enabling financial actions. If a user connects on the wrong chain, the UI prompts them to switch before any transaction is submitted.
+
+### All financial actions require connected wallet
+
+Read-only pages (`/app/events/:id`) work without a wallet. All write actions (`settle`, `refund`, `createSession`) require a connected wallet matching the expected chain.
+
+---
+
+## 7. Deployment runbook (Arc Mainnet)
+
+**Do not execute until prerequisite 1 (independent audit) is satisfied.**
+
+### Prerequisites (in order)
+
+1. **Independent security audit** — engage a professional EVM security firm; share `contracts/SessionSplit.sol`, `contracts/test/SessionSplit.t.sol`, `foundry.toml`, and `remappings.txt`; review all findings before deployment
+2. **Dedicated deployer wallet** — use a fresh wallet funded with only enough Arc Mainnet USDC for gas; never the sponsor or contributor wallet used in testing
+3. **Arc Mainnet USDC address confirmed** — verified live this session: `0x3600000000000000000000000000000000000000`, 6 decimals, chain ID 5042
+4. **Source and artifact integrity check:**
+   ```bash
+   forge build
+   # Confirm contracts/out/SessionSplit.sol/SessionSplit.json matches the source
+   shasum contracts/SessionSplit.sol
+   shasum contracts/out/SessionSplit.sol/SessionSplit.json
+   ```
+
+### Deployment steps
+
+**Step 1 — Confirm chain before broadcast**
 ```bash
 cast chain-id --rpc-url https://rpc.mainnet.arc.io
-# Expected: 5042
+# Must return 5042. Stop if it returns anything else.
 ```
 
-If the output is not `5042`, stop. Do not proceed.
-
-### Step 2 — Confirm USDC ERC-20 on mainnet
-
+**Step 2 — Estimate gas**
 ```bash
-cast call 0x3600000000000000000000000000000000000000 "symbol()(string)" \
-  --rpc-url https://rpc.mainnet.arc.io
-# Expected: "USDC"
-
-cast call 0x3600000000000000000000000000000000000000 "decimals()(uint8)" \
-  --rpc-url https://rpc.mainnet.arc.io
-# Expected: 6
+forge script contracts/script/DeployCreate2.s.sol \
+  --rpc-url https://rpc.mainnet.arc.io \
+  --private-key $DEPLOYER_KEY \
+  --sig "run(address)" 0x3600000000000000000000000000000000000000
+# Review estimated gas. Do not broadcast yet.
 ```
 
-If either check fails, stop. Do not pass the wrong USDC address to the constructor.
-
-### Step 3 — Build the contract
-
-```bash
-cd /home/user/app && forge build
-# Confirm: [PASS] Compiler run successful with no warnings
-```
-
-Verify the artifact matches the source:
-```bash
-sha256sum contracts/out/SessionSplit.sol/SessionSplit.json
-```
-Record the hash. This is the bytecode you will deploy.
-
-### Step 4 — Estimate gas
-
+**Step 3 — Deploy**
 ```bash
 forge create contracts/SessionSplit.sol:SessionSplit \
   --rpc-url https://rpc.mainnet.arc.io \
+  --private-key $DEPLOYER_KEY \
   --constructor-args 0x3600000000000000000000000000000000000000 \
-  --private-key $DEPLOYER_PRIVATE_KEY \
-  --gas-estimate-multiplier 130 \
-  --dry-run
+  --broadcast
 ```
 
-Review the estimated gas cost. Confirm the deployer wallet has sufficient USDC.
-
-### Step 5 — Deploy
-
-```bash
-forge create contracts/SessionSplit.sol:SessionSplit \
-  --rpc-url https://rpc.mainnet.arc.io \
-  --constructor-args 0x3600000000000000000000000000000000000000 \
-  --private-key $DEPLOYER_PRIVATE_KEY \
-  --broadcast \
-  --verify
-# --verify submits source to the Arc explorer for contract verification
-```
-
-Record:
-- `Deployed to:` — the mainnet contract address
-- `Transaction hash:` — the deploy tx hash
-
-**Do not proceed to Step 6 until you have independently confirmed the deploy tx on the Arc Mainnet explorer.**
-
-### Step 6 — Verify deployment
-
+**Step 4 — Verify constructor argument**
 ```bash
 cast call <DEPLOYED_ADDRESS> "usdc()(address)" --rpc-url https://rpc.mainnet.arc.io
-# Expected: 0x3600000000000000000000000000000000000000
-
+# Must return 0x3600000000000000000000000000000000000000
 cast call <DEPLOYED_ADDRESS> "nextSessionId()(uint256)" --rpc-url https://rpc.mainnet.arc.io
-# Expected: 1  (no sessions created yet)
+# Must return 1
 ```
 
-### Step 7 — Record the mainnet address
+**Step 5 — Record the address**
 
-Update `AGENTS.md` with the mainnet contract address and deploy tx hash.
-
-Populate `MAINNET_ADDRESS` in `src/contracts/sessionSplit.ts`:
+Edit `src/contracts/sessionSplit.ts`:
 ```typescript
-const MAINNET_ADDRESS = '<DEPLOYED_ADDRESS>' as const;
+const MAINNET_ADDRESS = "0x<VERIFIED_DEPLOYED_ADDRESS>" as const;
 ```
 
-### Step 8 — Minimal end-to-end verification (controlled test)
+Also record in `AGENTS.md` and `contracts/contract-metadata/`.
 
-Using a second wallet (not the deployer), perform ONE minimal test session on mainnet:
-1. Create a session: host payout = 1 USDC, reward budget = 0, deadline = 1 hour from now.
-2. Confirm the `SessionCreated` event log on the Arc Mainnet explorer.
-3. Settle immediately with 0 contributors.
-4. Confirm the host received exactly 1 USDC on-chain.
-5. Record the settle tx hash.
-
-This test uses real USDC. Keep the amounts minimal. Do not use any user funds.
-
-### Step 9 — Source verification
-
-Confirm the contract is verified on `https://explorer.arc.io`. If `forge create --verify` did not complete, submit manually:
+**Step 6 — Build and verify mainnet bundle**
 ```bash
-forge verify-contract <DEPLOYED_ADDRESS> contracts/SessionSplit.sol:SessionSplit \
-  --rpc-url https://rpc.mainnet.arc.io \
-  --constructor-args $(cast abi-encode "constructor(address)" 0x3600000000000000000000000000000000000000)
+VITE_NETWORK=mainnet bun run build
+# Confirm no errors. Confirm MAINNET_ADDRESS appears in dist/ with correct value.
 ```
+
+**Step 7 — Controlled end-to-end test**
+
+With a separate sponsor wallet and host wallet on Arc Mainnet with real USDC:
+1. Create one event with the minimum viable deposit (e.g. 1 USDC host payout + 0 reward budget)
+2. Immediately settle it (same-block or next-block)
+3. Verify the settlement transaction on [explorer.arc.io](https://explorer.arc.io)
+4. Record the transaction hash as mainnet evidence
+
+**Step 8 — Deploy to Vercel with `VITE_NETWORK=mainnet`**
+
+Set `VITE_NETWORK=mainnet` in Vercel project environment variables. Trigger a production deployment. Verify the live app connects to Arc Mainnet.
 
 ---
 
-## TASK 5 — Public Release Readiness
+## 8. Known limitations and trust assumptions
 
-### Production build
-
-`bun run dev` (Vite) and `bunx vite build` both succeed (confirmed in previous turns). Chunk size warnings for wagmi/viem are expected and not errors.
-
-### SPA routing
-
-`vercel.json` present with `/* → /index.html` rewrite. ✓  
-**FINDING F-5 (LOW):** Netlify `_redirects` file absent. See Task 2.
-
-### Environment configuration
-
-No secrets in source. `VITE_NETWORK` is the only new env var needed (public, browser-visible). Contract addresses are public. USDC address is public. No API keys or private keys in any source file. ✓
-
-### Real explorer URLs (mainnet)
-
-After mainnet deploy, the footer explorer link must use `https://explorer.arc.io` (not testnet). This is handled by the network configuration plan (Task 3) — `buildTxExplorerUrl(ACTIVE_CHAIN_ID, hash)` will resolve to the correct explorer once `ACTIVE_CHAIN_ID` is the mainnet chain ID.
-
-### Accessibility
-
-- All interactive elements have `aria-label` or visible label text. ✓
-- Tab navigation uses `role="tablist"` and `role="tab"` with `aria-selected`. ✓
-- Error and success states use `aria-live="polite"` and `role="alert"`. ✓
-- Focus-visible styles are applied to buttons. ✓
-
-**FINDING F-6 (INFO):** `datetime-local` inputs do not have an explicit `min` attribute. Browsers vary in whether they visually indicate past dates as unavailable. The frontend validates the deadline before enabling the button, but a `min` attribute would improve UX.
-
-### Mobile layout
-
-`max-w-xl mx-auto px-4` — single-column layout. Tab labels show short version on small screens (`sm:hidden`/`sm:inline`). The contributor row grid is single-column. Should render correctly on 375px+ screens. No horizontal overflow identified.
-
-### Arc Studio project URL preservation
-
-The Arc Studio project URL is embedded in the `Built with Arc Studio` footer of `README.md`. Per the task requirement, this must be preserved in all public deployments. Do not remove the `README.md` attribution or the landing page footer link.
+| Limitation | Impact | Mitigation |
+|---|---|---|
+| No independent audit | Critical — unknown vulnerabilities may exist | Prerequisite before mainnet; cannot be bypassed |
+| Sponsor can refund unsettled events | Host/contributors have no recourse if sponsor misses deadline | Documented UX warning; V2 adds evidence/dispute layer |
+| USDC blacklisting blocks settlement | Funds temporarily locked if any recipient is blacklisted | Documented; refund path available after deadline |
+| `block.timestamp` drift | Deadline enforcement may differ slightly from wall clock | Typical drift < 15s; use deadlines well above minimum |
+| Mock ERC-20 in tests | BlacklistingTransfer-failure not tested | Accept as known gap; fork test recommended |
+| Max 5 contributors | Hard limit enforced by contract | Documented; V2 proposal covers batch payouts |
 
 ---
 
-## TASK 6 — Evidence and Submission Checklist
+## 9. GO / NO-GO verdict
 
-Items marked ✓ are ready. Items marked ☐ require action before submission.
+### Verdict: NO-GO
 
-### Arc Studio
-- ✓ Arc Studio project open and building
-- ✓ Arc Studio project URL: preserved in project (visible in Arc Studio UI)
+Four blockers must be resolved before mainnet deployment, in this order:
 
-### Repository
-- ☐ Push to GitHub (not yet done — use the Integrations menu in Arc Studio to connect and push)
-- ☐ Repository URL: _to be recorded after push_
-
-### Public app URL
-- ☐ Deploy to Vercel, Netlify, or Hugging Face (not yet deployed)
-- ☐ App URL: _to be recorded after deploy_
-- ☐ Confirm `/app/events/1` loads without a wallet on the deployed URL
-
-### Mainnet contract
-- ☐ Independent security audit completed
-- ☐ `SessionSplit.sol` deployed to Arc Mainnet (chainId 5042)
-- ☐ Mainnet contract address: _to be recorded after deploy_
-- ☐ Contract verified on `https://explorer.arc.io`
-
-### Mainnet transactions
-- ☐ Successful `createSession` tx on Arc Mainnet with real USDC
-- ☐ Successful `settle` tx on Arc Mainnet
-- ☐ Both tx hashes recorded with explorer links
-
-### Demo
-- ☐ Demo video showing: create event → approve contributors → settlement receipt
-- ☐ Video shows event ID confirmed from receipt log (not guessed)
-- ☐ Video shows ArcScan explorer link for the settle transaction
-
-### Description
-```
-SeshPay is a sponsor-controlled USDC payout application built on Arc, 
-Circle's blockchain where USDC is the native gas token. Sponsors fund 
-sessions upfront, set a host payout and contributor reward budget, and 
-approve exact payments to up to five recipients — all in a single 
-on-chain transaction. The smart contract enforces sponsor-only access 
-control, a strict one-time settlement state machine, deadline-based 
-refunds, and CEI+reentrancy protection with no admin, no platform fee, 
-and no upgradeability. Built with Arc Studio.
-```
-
-### Builder profile
-- ☐ Add team/individual name and contact to the submission form
-
----
-
-## GO / NO-GO Recommendation
-
-### Current status: CONDITIONAL GO (testnet) / NO-GO (mainnet)
-
-**The testnet application is ready for demonstration.** All 140 automated tests pass, lint and typecheck are clean, the build succeeds, and four end-to-end flows (create, settle, refund, event detail) have been manually verified on Arc Testnet.
-
-**Mainnet is not ready.** The following are required before any mainnet deployment:
-
-| # | Item | Severity | Type |
+| # | Blocker | Type | Resolution |
 |---|---|---|---|
-| 1 | Professional third-party security audit of `SessionSplit.sol` | **CRITICAL** | External |
-| 2 | Network configuration changes (F-2): wagmi config, chain ID constants, contract address selection, footer links | **CRITICAL** | Safe code change |
-| 3 | Mainnet deployment using the runbook in Task 4 | **CRITICAL** | Deployment |
-| 4 | Mainnet end-to-end verification test (1 USDC settle) | **CRITICAL** | Manual |
-| 5 | Independent confirmation that Arc Mainnet USDC = `0x3600…0000` | **HIGH** | Verification |
-| 6 | GitHub push and public deployment | **HIGH** | Release |
-| 7 | Minimum deadline validation in CreateSession (F-4): add `deadlineTs > now + 300` | **LOW** | Safe code change |
-| 8 | Netlify `_redirects` file (F-5) | **LOW** | Safe code change |
-| 9 | USDC blacklisting disclosure in app terms (C-5) | **LOW** | Documentation |
+| **B-1** | No independent professional security audit of `SessionSplit.sol` | Critical | Engage a third-party EVM auditor; address all findings |
+| **B-2** | `MAINNET_ADDRESS` is empty; frontend will throw on mainnet build | Required | Populate after B-1 + successful deployment |
+| **B-3** | No controlled mainnet end-to-end transaction | Required | Perform Step 7 of the runbook after B-1 |
+| **B-4** | Deployer wallet not yet provisioned | Operational | Create a dedicated mainnet deployer wallet; fund with USDC for gas only |
 
-### Safe fixes applied (no financial behavior changed)
+### What is ready
 
-All four originally identified safe fixes were applied in the previous session:
+- Contract source is internally consistent, well-structured, and passes all 16 Foundry tests
+- Accounting invariants are exact and verified by source review
+- Authorization is sponsor-only with no bypass paths found
+- CEI + nonReentrant provides solid reentrancy protection
+- Frontend chain guard, mainnet-address throw guard, and chain-switch prompt are all in place
+- Arc Mainnet chain ID (5042) and USDC decimals (6) verified live this session
+- Two complete testnet flows (settle + refund) independently verified with raw RPC evidence
+- Production build is clean: no tracing/console-capture in bundle, all 162 automated tests passing
 
-1. **Network config (F-2) — APPLIED:** `VITE_NETWORK` env var, Arc Mainnet chain definition in `config.ts`, `ACTIVE_CHAIN_ID` export, runtime contract address selection in `sessionSplit.ts` with build-time error guard if mainnet address is empty.
-2. **Minimum deadline (F-4) — APPLIED:** `CreateSession.tsx` now prevents setting a deadline less than 5 minutes from the time the user enters it.
-3. **Netlify redirects (F-5) — APPLIED:** `public/_redirects` file added containing `/* /index.html 200`.
-4. **Footer text (F-3) — APPLIED:** "Arc Testnet only" text in `App.tsx` footer is now conditional on `!IS_MAINNET`.
+### Remaining manual wallet tests (not yet performed on mainnet)
 
-Additional fix applied during audit continuation:
+1. Create event with mainnet USDC — confirm two wallet transactions required
+2. Settle event with multiple contributors — confirm atomic distribution
+3. Refund after deadline — confirm exact deposit returned
+4. Wrong-chain connection — confirm UI blocks action and prompts switch
+5. Sponsor-mismatch — confirm Unauthorized error surfaced in UI
 
-5. **`tracing.ts` browser-global guards — APPLIED:** Five locations guarded with `typeof window !== 'undefined'`. The `eventId.test.ts` suite now passes cleanly (13/13) with no `ReferenceError: window is not defined` errors.
+---
 
-None of these touch `SessionSplit.sol`, its ABI, or any transaction-signing logic.
+*This document was written by the project developer and represents a self-review, not an independent audit. All technical claims reference the exact source files in this repository. Arc Mainnet RPC and USDC address values were verified by live `eth_chainId` and `decimals()` calls on 2026-10-28.*

@@ -82,12 +82,25 @@ Only the sponsor wallet (the one that called `createSession`) can approve payout
 
 ## Verified testnet transactions
 
-The following transactions were executed on Arc Testnet using test USDC and are permanently recorded on-chain.
+Two complete Arc Testnet flows have been independently verified by raw `eth_getLogs` RPC scan and receipt decoding. All transactions use test USDC only.
 
-| Event | Transaction | Explorer |
-|---|---|---|
-| Event #1 — funded | `0x929e...80b` | [View on ArcScan](https://explorer.testnet.arc.io/tx/0x929eba7096940d3ee07226e9a786bb334a7dfa3a047667588fb5eef5093e880b) |
-| Event #1 — settled | `0xa56b...f59` | [View on ArcScan](https://explorer.testnet.arc.io/tx/0xa56bcc89a998850fb0a7693a804795d48ca50b71aeb177a1657c56f223a6df59) |
+### Event #1 — funded and settled
+
+| Step | Transaction | Block | Explorer |
+|---|---|---|---|
+| Fund (create + deposit) | `0x929e...880b` | 69,014,824 | [View on ArcScan](https://explorer.testnet.arc.io/tx/0x929eba7096940d3ee07226e9a786bb334a7dfa3a047667588fb5eef5093e880b) |
+| Settle (atomic payout) | `0xa56b...df59` | 69,019,044 | [View on ArcScan](https://explorer.testnet.arc.io/tx/0xa56bcc89a998850fb0a7693a804795d48ca50b71aeb177a1657c56f223a6df59) |
+
+The settlement transaction emits `ParticipantPaid` for each recipient plus `SessionSettled` confirming the host payout, total contributor rewards, and any unused budget returned to the sponsor — all in one atomic on-chain transaction.
+
+### Event #2 — funded and refunded
+
+| Step | Transaction | Block | Explorer |
+|---|---|---|---|
+| Fund (create + deposit) | `0x04bb...7b6b` | 69,049,068 | [View on ArcScan](https://explorer.testnet.arc.io/tx/0x04bbb2445580c81f913b4aad186b116d019c3f396c883753770f7b9f8e077b6b) |
+| Refund (full deposit returned) | `0xc94a...3f1b` | 69,053,518 | [View on ArcScan](https://explorer.testnet.arc.io/tx/0xc94ae51b104078ff547a7d8284692741887a0efb7eaf3ac8013bf97609c83f1b) |
+
+Event #2 deposit: 400,000 USDC atomic units (0.40 USDC, 6 decimals). The `SessionRefunded` log confirms `amount = 400,000` — an exact match with the original deposit, with no deduction. Arc Testnet USDC emits two ERC-20 `Transfer` logs per transaction (native 18-decimal view and ERC-20 6-decimal view of the same asset); only the 6-decimal value of 0.40 USDC represents the actual amount transferred.
 
 ---
 
