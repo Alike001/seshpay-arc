@@ -153,7 +153,17 @@ export default function SettleSession() {
     !budgetExceeded &&
     !showNotSponsor &&
     !notOpen &&
-    !notFound;
+    !notFound &&
+    // Fail closed: partial rows must be completed or removed before settlement.
+    // Silently excluding partial rows would send a different transaction than
+    // the user reviewed — block until every non-empty row is fully filled.
+    partialRows.length === 0 &&
+    // Fail closed: session must be loaded, exist, be OPEN, and deadline active.
+    !sessionLoading &&
+    !sessionError &&
+    fetchedSession !== null &&
+    fetchedSession !== undefined &&
+    !deadlinePassed;
 
   // ── Write tx ─────────────────────────────────────────────────────────────
   const {
@@ -492,11 +502,12 @@ export default function SettleSession() {
           </div>
 
           {partialRows.length > 0 && (
-            <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+            <p className="mt-2 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
               {partialRows.length === 1
-                ? "1 row is partially filled and will be skipped."
-                : `${partialRows.length} rows are partially filled and will be skipped.`}{" "}
-              Fill both wallet address and amount, or remove the row.
+                ? "1 row is incomplete."
+                : `${partialRows.length} rows are incomplete.`}{" "}
+              Fill both wallet address and amount, or remove the row before settling.
+              Settlement is blocked until all rows are complete.
             </p>
           )}
 

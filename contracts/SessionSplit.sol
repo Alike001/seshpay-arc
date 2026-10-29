@@ -24,6 +24,7 @@ contract SessionSplit is ReentrancyGuard {
     }
 
     error ZeroAddress();
+    error ContractAddress();
     error InvalidAmount();
     error InvalidDeadline();
     error Unauthorized();
@@ -71,6 +72,7 @@ contract SessionSplit is ReentrancyGuard {
         uint256 deadline
     ) external returns (uint256 sessionId) {
         if (host == address(0)) revert ZeroAddress();
+        if (host == address(this)) revert ContractAddress();
         if (hostPayout == 0) revert InvalidAmount();
         if (deadline <= block.timestamp) revert InvalidDeadline();
 
@@ -107,6 +109,7 @@ contract SessionSplit is ReentrancyGuard {
 
         for (uint256 i = 0; i < participants.length; ++i) {
             if (participants[i] == address(0)) revert ZeroAddress();
+            if (participants[i] == address(this)) revert ContractAddress();
             for (uint256 j = i + 1; j < participants.length; ++j) {
                 if (participants[i] == participants[j]) revert DuplicateRecipient();
             }

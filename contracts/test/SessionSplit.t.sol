@@ -421,3 +421,272 @@ contract SessionSplitTest is SessionSplitTestBase {
         split.createSession(host, HOST_PAYOUT, REWARD_BUDGET, block.timestamp);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Security-hardening tests — new checks added in this PR
+// All 16 original tests above are preserved unchanged.
+// ---------------------------------------------------------------------------
+contract SessionSplitHardeningTest is SessionSplitTestBase {
+
+    // -----------------------------------------------------------------------
+    // H-1. testZeroAddressConstructor
+    //      Constructing with address(0) as the USDC token must revert.
+    // -----------------------------------------------------------------------
+    function testZeroAddressConstructor() public {
+        vm.expectRevert(SessionSplit.ZeroAddress.selector);
+        new SessionSplit(address(0));
+    }
+
+    // -----------------------------------------------------------------------
+    // H-2. testContractAsHost
+    //      Setting the contract itself as the host must revert with
+    //      ContractAddress(). Without this guard the contract would transfer
+    //      hostPayout to itself, permanently locking those funds.
+    // -----------------------------------------------------------------------
+    function testContractAsHost() public {
+        vm.prank(sponsor);
+        vm.expectRevert(SessionSplit.ContractAddress.selector);
+        split.createSession(address(split), HOST_PAYOUT, REWARD_BUDGET, DEADLINE);
+    }
+
+    // -----------------------------------------------------------------------
+    // H-3. testContractAsParticipant
+    //      Passing the contract as a contributor address must revert with
+    //      ContractAddress(). Same fund-lock risk as H-2 but in settle().
+    // -----------------------------------------------------------------------
+    function testContractAsParticipant() public {
+        uint256 sessionId = _createSession();
+
+        address[] memory participants = new address[](1);
+        participants[0] = address(split); // ← the contract itself
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1e6;
+
+        vm.prank(sponsor);
+        vm.expectRevert(SessionSplit.ContractAddress.selector);
+        split.settle(sessionId, participants, amounts);
+    }
+
+    // -----------------------------------------------------------------------
+    // H-4. testZeroAddressParticipant
+    //      address(0) as a contributor was already guarded; confirm the
+    //      error is ZeroAddress, not some other revert.
+    // -----------------------------------------------------------------------
+    function testZeroAddressParticipant() public {
+        uint256 sessionId = _createSession();
+
+        address[] memory participants = new address[](1);
+        participants[0] = address(0);
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1e6;
+
+        vm.prank(sponsor);
+        vm.expectRevert(SessionSplit.ZeroAddress.selector);
+        split.settle(sessionId, participants, amounts);
+    }
+
+    // -----------------------------------------------------------------------
+    // H-5. testRepeatedRefund
+    //      Calling refund twice on the same session must revert the second
+    //      time with InvalidState (state is already REFUNDED).
+    // -----------------------------------------------------------------------
+    function testRepeatedRefund() public {
+        uint256 sessionId = _createSession();
+        vm.warp(DEADLINE + 1);
+
+        vm.prank(sponsor);
+        split.refund(sessionId);
+
+        vm.prank(sponsor);
+        vm.expectRevert(SessionSplit.InvalidState.selector);
+        split.refund(sessionId);
+    }
+
+    // -----------------------------------------------------------------------
+    // H-6. testSettleAfterRefund
+    //      After a successful refund, settle must revert with InvalidState.
+    // -----------------------------------------------------------------------
+    function testSettleAfterRefund() public {
+        uint256 sessionId = _createSession();
+        vm.warp(DEADLINE + 1);
+
+        vm.prank(sponsor);
+        split.refund(sessionId);
+
+        // Re-mint and approve so the sponsor has enough balance if the
+        // contract tried to pull funds (it should not get that far).
+        token.mint(sponsor, TOTAL_DEPOSIT);
+        vm.prank(sponsor);
+        token.approve(address(split), type(uint256).max);
+
+        address[] memory participants = new address[](0);
+        uint256[] memory amounts      = new uint256[](0);
+
+        vm.prank(sponsor);
+        vm.expectRevert(SessionSplit.InvalidState.selector);
+        split.settle(sessionId, participants, amounts);
+    }
+
+    // -----------------------------------------------------------------------
+    // H-7. testExactDeadlineBoundary
+    //      At block.timestamp == deadline exactly:
+    //        - settle must SUCCEED (contract uses strict-greater check)
+    //        - refund must REVERT with DeadlineNotPassed
+    // -----------------------------------------------------------------------
+    function testExactDeadlineBoundarySettle() public {
+        uint256 sessionId = _createSession();
+        vm.warp(DEADLINE); // exactly at the deadline
+
+        address[] memory participants = new address[](0);
+        uint256[] memory amounts      = new uint256[](0);
+
+        // settle: block.timestamp > deadline is false when equal → should succeed
+        vm.prank(sponsor);
+        split.settle(sessionId, participants, amounts);
+
+        (,,,,,SessionSplit.SessionState stateAfter) = split.sessions(sessionId);
+        assertEq(uint8(stateAfter), uint8(SessionSplit.SessionState.SETTLED));
+    }
+
+    function testExactDeadlineBoundaryRefund() public {
+        uint256 sessionId = _createSession();
+        vm.warp(DEADLINE); // exactly at the deadline
+
+        // refund: block.timestamp <= deadline is true when equal → must revert
+        vm.prank(sponsor);
+        vm.expectRevert(SessionSplit.DeadlineNotPassed.selector);
+        split.refund(sessionId);
+    }
+
+    // -----------------------------------------------------------------------
+    // H-8. testZeroRewardBudget
+    //      Creating a session with rewardBudget == 0 is valid (host-only
+    //      event). Settlement with no participants must pay the host and
+    //      return zero to the sponsor without reverting.
+    // -----------------------------------------------------------------------
+    function testZeroRewardBudget() public {
+        vm.prank(sponsor);
+        uint256 sessionId = split.createSession(host, HOST_PAYOUT, 0, DEADLINE);
+
+        uint256 hostBefore    = token.balanceOf(host);
+        uint256 sponsorBefore = token.balanceOf(sponsor);
+
+        address[] memory participants = new address[](0);
+        uint256[] memory amounts      = new uint256[](0);
+
+        vm.prank(sponsor);
+        split.settle(sessionId, participants, amounts);
+
+        assertEq(token.balanceOf(host), hostBefore + HOST_PAYOUT, "host payout");
+        // refundedToSponsor == 0, so sponsor balance unchanged
+        assertEq(token.balanceOf(sponsor), sponsorBefore, "sponsor unchanged");
+    }
+
+    // -----------------------------------------------------------------------
+    // H-9. testTransferFailureRollback
+    //      If MockERC20.transfer reverts mid-settlement, the entire tx
+    //      reverts and the contract balance is unchanged (atomicity test).
+    //      We simulate this by draining the contract's USDC balance after
+    //      createSession so the first safeTransfer (host payout) fails.
+    // -----------------------------------------------------------------------
+    function testTransferFailureRollback() public {
+        uint256 sessionId = _createSession();
+
+        // Drain the contract's token balance so the host transfer will fail
+        // We do this by directly manipulating MockERC20 storage.
+        // MockERC20 has a public balanceOf mapping — use vm.store.
+        // Slot for balanceOf[address(split)]:
+        //   mapping at slot 3 (name=0, symbol=1, decimals=2, totalSupply=3... wait, check)
+        // Actually easier: have someone transfer the contract's balance out.
+        // The cleanest approach: use a "draining" sponsor — create another
+        // session from a different sponsor so the balance is theirs, then
+        // check our session's settle fails when the contract has 0 extra.
+
+        // Simpler: use vm.mockCall to make the token's transfer() return false.
+        // safeTransfer uses SafeERC20 which checks the return value and reverts.
+        vm.mockCall(
+            address(token),
+            abi.encodeWithSelector(token.transfer.selector, host, HOST_PAYOUT),
+            abi.encode(false) // simulate a failed transfer
+        );
+
+        address[] memory participants = new address[](0);
+        uint256[] memory amounts      = new uint256[](0);
+
+        vm.prank(sponsor);
+        vm.expectRevert(); // SafeERC20 wraps the false return as a revert
+        split.settle(sessionId, participants, amounts);
+
+        vm.clearMockedCalls();
+
+        // State must still be OPEN — the revert rolled everything back
+        (,,,,,SessionSplit.SessionState stateStillOpen) = split.sessions(sessionId);
+        assertEq(uint8(stateStillOpen), uint8(SessionSplit.SessionState.OPEN));
+    }
+
+    // -----------------------------------------------------------------------
+    // H-10. testAccountingInvariant (fuzz)
+    //       For any valid (hostPayout, rewardBudget, participantCount,
+    //       amounts[]) combination, funds-in == funds-out exactly.
+    // -----------------------------------------------------------------------
+    function testAccountingInvariantFuzz(
+        uint64 rawHostPayout,
+        uint64 rawBudget,
+        uint8  rawCount
+    ) public {
+        // Bound inputs to sane ranges
+        uint256 hp     = bound(uint256(rawHostPayout), 1, 1_000_000e6);
+        uint256 budget = bound(uint256(rawBudget),     0, 1_000_000e6);
+        uint256 count  = bound(uint256(rawCount),      0, 5);
+
+        // Ensure sponsor has enough balance
+        token.mint(sponsor, hp + budget);
+        vm.prank(sponsor);
+        token.approve(address(split), type(uint256).max);
+
+        vm.prank(sponsor);
+        uint256 sessionId = split.createSession(host, hp, budget, DEADLINE);
+
+        // Build participant amounts that don't exceed budget
+        address[] memory participants = new address[](count);
+        uint256[] memory amounts      = new uint256[](count);
+        uint256 remaining = budget;
+        for (uint256 i = 0; i < count; ++i) {
+            participants[i] = makeAddr(string(abi.encodePacked("fuzz", i)));
+            uint256 amt = count > 0 ? remaining / (count - i) : 0;
+            amounts[i]  = amt;
+            remaining  -= amt;
+        }
+
+        uint256 contractBefore = token.balanceOf(address(split));
+        uint256 hostBefore     = token.balanceOf(host);
+        uint256 sponsorBefore  = token.balanceOf(sponsor);
+
+        vm.prank(sponsor);
+        split.settle(sessionId, participants, amounts);
+
+        // Contract balance decreased by exactly totalDeposit
+        uint256 totalDeposit = hp + budget;
+        assertEq(
+            token.balanceOf(address(split)),
+            contractBefore - totalDeposit,
+            "contract balance"
+        );
+
+        // Host received exactly hostPayout
+        assertEq(token.balanceOf(host), hostBefore + hp, "host payout");
+
+        // All participant amounts sum correctly
+        uint256 totalPaid = 0;
+        for (uint256 i = 0; i < count; ++i) {
+            assertEq(token.balanceOf(participants[i]), amounts[i], "participant payout");
+            totalPaid += amounts[i];
+        }
+
+        // Sponsor received unused budget back
+        uint256 expectedBack = budget - totalPaid;
+        assertEq(token.balanceOf(sponsor), sponsorBefore + expectedBack, "sponsor refund");
+    }
+}
