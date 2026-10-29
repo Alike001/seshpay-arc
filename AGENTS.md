@@ -2,9 +2,18 @@
 
 ## Deployed Contracts
 
-| Contract | Network | Address | Explorer |
-|---|---|---|---|
-| SessionSplit | Arc Testnet | 0x0fe8a41346ab7aa30dc183384a85b5e36051713c | https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c |
+| Contract | Network | Address | Explorer | Notes |
+|---|---|---|---|---|
+| SessionSplit (hardened, RC) | Arc Testnet | 0x27624bae0446d678f0aaa64b7d44615c9a24db8c | https://explorer.testnet.arc.io/address/0x27624bae0446d678f0aaa64b7d44615c9a24db8c | Deployed 2026-10-29, main b7c3bf3, includes ContractAddress() guards |
+| SessionSplit (original) | Arc Testnet | 0x0fe8a41346ab7aa30dc183384a85b5e36051713c | https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c | Deployed 2026-10-24, pre-hardening, preserved for backwards compat |
+
+## Hardened RC deployment (2026-10-29)
+- Address: 0x27624bae0446d678f0aaa64b7d44615c9a24db8c
+- Deploy tx: 0x2e869c28aa9edd54959bdafc45b844b0c5d279d0cce511fd0cf19ead012845ca
+- Source: main commit b7c3bf35abb00dca66ec455039011fd0e3cc838a
+- Runtime SHA-256 (eth_getCode, immutables filled): e2ba445af6cb74d98bb791c1f3ef3aad27ed8291ffc2f6298e4e20202ae6c46d
+- Bytecode verification: EXACT MATCH against hardened artifact
+- Integration tests: 18/18 pass (fork, separate sponsor/host/contributor wallets)
 
 ## USDC (Arc Testnet)
 Address: 0x3600000000000000000000000000000000000000 (6 decimals ERC-20 view)
