@@ -128,9 +128,19 @@ constructor(address usdcAddress) {
 
 The only constructor argument is the USDC ERC-20 address. No owner, no fee recipient, no initializer. A deployment to the wrong address (e.g. testnet USDC on mainnet) would silently succeed at deployment but all `safeTransferFrom` calls would fail at runtime (wrong token). **The deployment runbook must include explicit chain ID confirmation and USDC address verification before broadcast.**
 
-### 3.8 No issues found in source
+### 3.8 Security findings and hardening applied (2026-10-29)
 
-The following categories were checked and no defects were found:
+#### Finding S-1 — Contract self-transfer (MEDIUM, fixed)
+
+`createSession` accepted `host == address(this)` and `settle` accepted `participants[i] == address(this)`. In both cases `safeTransfer` would move USDC to the contract itself, where it has no withdrawal path, permanently locking those funds.
+
+**Fix:** Added `error ContractAddress()` and checks:
+- `createSession`: `if (host == address(this)) revert ContractAddress();`
+- `settle` participant loop: `if (participants[i] == address(this)) revert ContractAddress();`
+
+New Foundry tests `testContractAsHost` and `testContractAsParticipant` verify rejection.
+
+#### Remaining categories — no defects found
 
 | Category | Finding |
 |---|---|
@@ -139,7 +149,7 @@ The following categories were checked and no defects were found:
 | Access control bypass | None — `msg.sender == session.sponsor` is the only auth path |
 | Storage collision | N/A — no proxy, no delegatecall |
 | Front-running | Sponsor-only settlement; front-running by a third party cannot succeed |
-| Griefing via participant count | TooManyParticipants() caps at 5, checked first |
+| Griefing via participant count | `TooManyParticipants()` caps at 5, checked first |
 | Event ID collision | `nextSessionId` increments monotonically starting at 1; no collision path |
 | Uninitialized session reads | A read of `sessions[N]` for a non-existent ID returns zero values (sponsor = address(0)); `Unauthorized()` fires on any settle/refund attempt |
 
@@ -147,9 +157,15 @@ The following categories were checked and no defects were found:
 
 ## 4. Foundry test coverage
 
-**16 tests, all passing** (verified by `forge test` run 2026-10-28).
+**Original suite: 16 tests** in `SessionSplitTest`.  
+**Hardening suite: 13 test functions** in `SessionSplitHardeningTest` (added 2026-10-29).  
+**Total: 29 Foundry test functions** — confirmed by `forge test --summary` (13 + 16 = 29).
 
-| # | Test | What it verifies |
+> Counting note: H-7a (`testExactDeadlineBoundarySettle`) and H-7b (`testExactDeadlineBoundaryRefund`) are two separate test functions. H-9 (`testTransferFailureRollback`) was previously documented as "H-9. testFailedTransferRollback" — the function was renamed to `testTransferFailureRollback` before the initial commit because Forge v1.7 removed the `testFail*` prefix convention. H-11 (`testMidSettlementAtomicity`) and H-12 (`testRefundTransferFailureRollback`) were added in the follow-up pass, raising the hardening count from 11 to 13.
+
+#### Original 16 (`SessionSplitTest`)
+
+| # | Test name | What it verifies |
 |---|---|---|
 | 1 | `testSuccessfulMultiRecipientPayout` | 5 participants, partial budget, leftover returned to sponsor |
 | 2 | `testUnauthorizedSettlement` | Non-sponsor `settle` reverts `Unauthorized()` |
@@ -160,15 +176,37 @@ The following categories were checked and no defects were found:
 | 7 | `testRefundAfterSettlement` | `refund` after `settle` reverts `InvalidState()` |
 | 8 | `testRefundAfterDeadline` | Full deposit returned; accounting exact |
 | 9 | `testUnauthorizedRefund` | Non-sponsor `refund` reverts `Unauthorized()` |
-| 10 | `testRepeatedRefund` | Second `refund` reverts `InvalidState()` |
-| 11 | `testZeroAddressConstructor` | `ZeroAddress()` on null USDC |
-| 12 | `testZeroAddressHost` | `ZeroAddress()` on null host |
-| 13 | `testPastDeadline` | Deadline in past reverts `InvalidDeadline()` |
-| 14 | `testTooManyParticipants` | 6 participants reverts `TooManyParticipants()` |
-| 15 | `testLengthMismatch` | Mismatched arrays reverts `LengthMismatch()` |
-| 16 | `testZeroAddressParticipant` | Null participant reverts `ZeroAddress()` |
+| 10 | `testDeadlinePassedSettlement` | `settle` after deadline reverts `DeadlinePassed()` |
+| 11 | `testZeroParticipants` | Settle with no contributors: host paid, full budget returned |
+| 12 | `testLengthMismatch` | Mismatched arrays reverts `LengthMismatch()` |
+| 13 | `testTooManyParticipants` | 6 participants reverts `TooManyParticipants()` |
+| 14 | `testZeroHostAddress` | `ZeroAddress()` on null host |
+| 15 | `testZeroHostPayout` | `InvalidAmount()` on zero hostPayout |
+| 16 | `testPastDeadline` | `InvalidDeadline()` when deadline == block.timestamp |
 
-**Coverage gap:** The MockERC20 used in tests does not implement Circle's blacklisting behavior. No test covers a settlement or refund that fails due to USDC transfer reversion. This is a known limitation — a fork test against live Arc Testnet USDC would be needed to verify this scenario.
+#### Hardening 13 (`SessionSplitHardeningTest`) — added 2026-10-29
+
+| # | Test name | What it verifies |
+|---|---|---|
+| H-1 | `testZeroAddressConstructor` | `ZeroAddress()` on null USDC constructor argument |
+| H-2 | `testContractAsHost` | `ContractAddress()` when host == address(this) |
+| H-3 | `testContractAsParticipant` | `ContractAddress()` when participant == address(this) |
+| H-4 | `testZeroAddressParticipant` | `ZeroAddress()` on null participant in settle |
+| H-5 | `testRepeatedRefund` | Second `refund` reverts `InvalidState()` |
+| H-6 | `testSettleAfterRefund` | `settle` after `refund` reverts `InvalidState()` |
+| H-7a | `testExactDeadlineBoundarySettle` | `settle` at `block.timestamp == deadline` succeeds |
+| H-7b | `testExactDeadlineBoundaryRefund` | `refund` at `block.timestamp == deadline` reverts `DeadlineNotPassed()` |
+| H-8 | `testZeroRewardBudget` | Zero budget session: host paid, no sponsor refund, no revert |
+| H-9 | `testTransferFailureRollback` | Host transfer fails (first transfer) → whole tx reverts, state OPEN |
+| H-10 | `testAccountingInvariantFuzz` | Fuzz (256 runs): funds-in == funds-out for any valid (hp, budget, count, amounts) |
+| H-11 | `testMidSettlementAtomicity` | Host + first contributor paid; second contributor transfer fails → full revert; host, p1, and contract balances all unchanged; state OPEN |
+| H-12 | `testRefundTransferFailureRollback` | Refund transfer to sponsor returns false → refund reverts, balances unchanged, state OPEN |
+
+**Coverage notes:**
+- H-9 simulates failure of the **first** (host) transfer via `vm.mockCall`. State is unchanged before any funds move.
+- H-11 strengthens atomicity by simulating failure **after** two transfers have been made (host and first contributor). The EVM rolls back all state changes in the transaction, so all three balance assertions confirm Solidity's atomicity guarantee — not a custom try/catch mechanism.
+- Both tests use `vm.mockCall` to return `false` from `MockERC20.transfer()`, which `SafeERC20.safeTransfer` detects and reverts.
+- The `MockERC20` does not implement Circle's USDC blacklisting. A fork test against live Arc Testnet USDC would close that specific gap and is recommended before mainnet deployment.
 
 ---
 
@@ -210,7 +248,7 @@ if (IS_MAINNET && !MAINNET_ADDRESS) {
 }
 ```
 
-This is a build-time and runtime guard. Setting `VITE_NETWORK=mainnet` in Vercel environment variables without populating `MAINNET_ADDRESS` will make the production app throw immediately on load — it will not silently use the testnet contract.
+This is a **runtime guard, not a build-time guard.** `MAINNET_ADDRESS` is an empty string constant evaluated at module load time in the browser. `vite build` with `VITE_NETWORK=mainnet` will succeed without error — Vite cannot evaluate module-level `throw` statements at build time. The throw fires only when the browser executes the JavaScript module, causing the app to crash on load with a descriptive error message. Setting `VITE_NETWORK=mainnet` in Vercel environment variables without populating `MAINNET_ADDRESS` will therefore produce a working build artifact that crashes immediately when any user opens the app — it will not silently fall back to the testnet contract.
 
 ### Chain switching
 
@@ -247,22 +285,33 @@ cast chain-id --rpc-url https://rpc.mainnet.arc.io
 # Must return 5042. Stop if it returns anything else.
 ```
 
-**Step 2 — Estimate gas**
+**Step 2 — Simulate deployment (dry run)**
+
+`forge create` defaults to **dry-run mode** — no transaction is submitted without the `--broadcast` flag. Run the command below as-is (without `--broadcast`) to check that it compiles, resolves, and estimates gas without sending anything onchain.
+
 ```bash
-forge script contracts/script/DeployCreate2.s.sol \
+forge create contracts/SessionSplit.sol:SessionSplit \
   --rpc-url https://rpc.mainnet.arc.io \
   --private-key $DEPLOYER_KEY \
-  --sig "run(address)" 0x3600000000000000000000000000000000000000
-# Review estimated gas. Do not broadcast yet.
+  --constructor-args 0x3600000000000000000000000000000000000000
+# No --broadcast → dry run only. Nothing is sent onchain.
+# Review the estimated gas. Stop if any error appears.
 ```
 
-**Step 3 — Deploy**
+Note: `contracts/script/DeployCreate2.s.sol` is a CREATE2 helper for deterministic addresses. It defines `run()` with no arguments (constructor args come from env vars). It is not used here — Step 3 deploys directly with `forge create`.
+
+**Step 3 — Deploy (live broadcast, authorized personnel only)**
+
+**Do not run this step until Prerequisites 1–4 are satisfied and you have independently confirmed the dry run in Step 2 is error-free.**
+
 ```bash
 forge create contracts/SessionSplit.sol:SessionSplit \
   --rpc-url https://rpc.mainnet.arc.io \
   --private-key $DEPLOYER_KEY \
   --constructor-args 0x3600000000000000000000000000000000000000 \
   --broadcast
+# --broadcast submits the transaction to the network with real funds.
+# This action is irreversible.
 ```
 
 **Step 4 — Verify constructor argument**

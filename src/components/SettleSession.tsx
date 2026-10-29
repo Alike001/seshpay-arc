@@ -19,6 +19,7 @@ import {
   useSwitchChain,
 } from "wagmi";
 import { Plus, Trash2, Loader2, ExternalLink, Info, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import { isAddress } from "viem";
 import { SESSION_SPLIT } from "@/contracts/sessionSplit";
 import { parseUsdcSafe, formatUsdcDisplay, formatAddress, formatDeadline, isDeadlinePassed, parseOnchainError } from "@/utils/format";
 import { buildTxExplorerUrl } from "@/onchain-facts";
@@ -99,25 +100,65 @@ export default function SettleSession() {
     setContributors(updated);
   }
 
-  // Rows where both address AND amount are properly filled
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+  // A row is "address-valid" only when viem isAddress accepts it (EIP-55 or
+  // all-lowercase) AND it is not the zero address.
+  // Previously used `startsWith("0x") && length === 42` which accepted
+  // malformed hex strings and wrong-checksum addresses.
+  function rowAddressValid(addr: string): boolean {
+    return isAddress(addr) && addr.toLowerCase() !== ZERO_ADDRESS;
+  }
+
+  // Rows that are fully filled and address-valid — these go to calldata.
   const filledRows = contributors.filter(
     (c) =>
-      c.address.startsWith("0x") &&
-      c.address.length === 42 &&
+      rowAddressValid(c.address) &&
       c.amount.trim() !== "" &&
       c.amount.trim() !== "0"
   );
 
-  // Rows with partial data — warn but don't block
+  // Rows where the address field is non-empty but fails isAddress validation
+  // (malformed hex, wrong length, bad EIP-55 checksum, or zero address).
+  // These must be corrected or removed — they cannot be silently skipped.
+  const invalidAddrRows = contributors.filter(
+    (c) =>
+      c.address !== "" &&
+      !isAddress(c.address)
+  );
+
+  // Rows where the address is the zero address — reject explicitly.
+  const zeroAddrRows = contributors.filter(
+    (c) =>
+      isAddress(c.address) &&
+      c.address.toLowerCase() === ZERO_ADDRESS
+  );
+
+  // Rows with partial data (any non-empty field, but not fully valid).
+  // Uses the strict rowAddressValid definition so a malformed address is
+  // caught by invalidAddrRows above, not silently treated as partial.
   const partialRows = contributors.filter(
     (c) =>
       (c.address !== "" || c.amount !== "") &&
-      !filledRows.includes(c)
+      !filledRows.includes(c) &&
+      !invalidAddrRows.includes(c) &&
+      !zeroAddrRows.includes(c)
   );
 
-  // Duplicate address check
+  // Duplicate address check (across filled rows only)
   const addresses = filledRows.map((c) => c.address.toLowerCase());
   const hasDuplicates = addresses.length !== new Set(addresses).size;
+
+  // Reject the contract address as a contributor — the original Arc Testnet
+  // contract has no withdrawal path; funds would be permanently locked.
+  // The hardened mainnet contract enforces this onchain too, but this check
+  // catches it before any wallet prompt.
+  // Note: this frontend guard cannot prevent direct contract calls.
+  const contractAddrRows = filledRows.filter(
+    (c) =>
+      isAddress(c.address) &&
+      c.address.toLowerCase() === SESSION_SPLIT.address.toLowerCase()
+  );
 
   // Total of all filled amounts
   const { totalAmountBig, parseError } = useMemo(() => {
@@ -153,7 +194,20 @@ export default function SettleSession() {
     !budgetExceeded &&
     !showNotSponsor &&
     !notOpen &&
-    !notFound;
+    !notFound &&
+    contractAddrRows.length === 0 &&
+    invalidAddrRows.length === 0 &&
+    zeroAddrRows.length === 0 &&
+    // Fail closed: partial rows must be completed or removed before settlement.
+    // Silently excluding partial rows would send a different transaction than
+    // the user reviewed — block until every non-empty row is fully filled.
+    partialRows.length === 0 &&
+    // Fail closed: session must be loaded, exist, be OPEN, and deadline active.
+    !sessionLoading &&
+    !sessionError &&
+    fetchedSession !== null &&
+    fetchedSession !== undefined &&
+    !deadlinePassed;
 
   // ── Write tx ─────────────────────────────────────────────────────────────
   const {
@@ -491,12 +545,38 @@ export default function SettleSession() {
             ))}
           </div>
 
+          {invalidAddrRows.length > 0 && (
+            <p className="mt-2 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
+              {invalidAddrRows.length === 1
+                ? "1 address is invalid."
+                : `${invalidAddrRows.length} addresses are invalid.`}{" "}
+              Enter a valid 0x EVM wallet address (42 hex characters, correct EIP-55 checksum),
+              or remove the row. Settlement is blocked until all addresses are valid.
+            </p>
+          )}
+
+          {zeroAddrRows.length > 0 && (
+            <p className="mt-2 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
+              The zero address (0x000…000) cannot be a contributor recipient.
+              Remove that row before settling.
+            </p>
+          )}
+
           {partialRows.length > 0 && (
-            <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+            <p className="mt-2 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
               {partialRows.length === 1
-                ? "1 row is partially filled and will be skipped."
-                : `${partialRows.length} rows are partially filled and will be skipped.`}{" "}
-              Fill both wallet address and amount, or remove the row.
+                ? "1 row is incomplete."
+                : `${partialRows.length} rows are incomplete.`}{" "}
+              Fill both wallet address and amount, or remove the row before settling.
+              Settlement is blocked until all rows are complete.
+            </p>
+          )}
+
+          {contractAddrRows.length > 0 && (
+            <p className="mt-2 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
+              The contract address cannot be a contributor — funds sent to the
+              contract have no withdrawal path and would be permanently locked.
+              Remove that row before settling.
             </p>
           )}
 
