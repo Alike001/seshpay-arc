@@ -157,9 +157,11 @@ New Foundry tests `testContractAsHost` and `testContractAsParticipant` verify re
 
 ## 4. Foundry test coverage
 
-**Original suite: 16 tests** in `SessionSplitTest` (verified by `forge test` run 2026-10-28).  
-**Hardening suite: 13 additional tests** in `SessionSplitHardeningTest` added 2026-10-29 (see below).  
-**Total: 29 Foundry tests.**
+**Original suite: 16 tests** in `SessionSplitTest`.  
+**Hardening suite: 13 test functions** in `SessionSplitHardeningTest` (added 2026-10-29).  
+**Total: 29 Foundry test functions** — confirmed by `forge test --summary` (13 + 16 = 29).
+
+> Counting note: H-7a (`testExactDeadlineBoundarySettle`) and H-7b (`testExactDeadlineBoundaryRefund`) are two separate test functions. H-9 (`testTransferFailureRollback`) was previously documented as "H-9. testFailedTransferRollback" — the function was renamed to `testTransferFailureRollback` before the initial commit because Forge v1.7 removed the `testFail*` prefix convention. H-11 (`testMidSettlementAtomicity`) and H-12 (`testRefundTransferFailureRollback`) were added in the follow-up pass, raising the hardening count from 11 to 13.
 
 #### Original 16 (`SessionSplitTest`)
 
@@ -195,10 +197,16 @@ New Foundry tests `testContractAsHost` and `testContractAsParticipant` verify re
 | H-7a | `testExactDeadlineBoundarySettle` | `settle` at `block.timestamp == deadline` succeeds |
 | H-7b | `testExactDeadlineBoundaryRefund` | `refund` at `block.timestamp == deadline` reverts `DeadlineNotPassed()` |
 | H-8 | `testZeroRewardBudget` | Zero budget session: host paid, no sponsor refund, no revert |
-| H-9 | `testFailedTransferRollback` | Failed token transfer reverts whole tx; state stays OPEN |
-| H-10 | `testAccountingInvariantFuzz` | Fuzz: funds-in == funds-out for any valid (hp, budget, count, amounts) |
+| H-9 | `testTransferFailureRollback` | Host transfer fails (first transfer) → whole tx reverts, state OPEN |
+| H-10 | `testAccountingInvariantFuzz` | Fuzz (256 runs): funds-in == funds-out for any valid (hp, budget, count, amounts) |
+| H-11 | `testMidSettlementAtomicity` | Host + first contributor paid; second contributor transfer fails → full revert; host, p1, and contract balances all unchanged; state OPEN |
+| H-12 | `testRefundTransferFailureRollback` | Refund transfer to sponsor returns false → refund reverts, balances unchanged, state OPEN |
 
-**Remaining coverage gap:** The `MockERC20` used in tests does not implement Circle's USDC blacklisting. `testFailedTransferRollback` uses `vm.mockCall` to simulate a false return value, which covers the rollback atomicity property but not the blacklisting scenario specifically. A fork test against live Arc Testnet USDC is recommended before mainnet.
+**Coverage notes:**
+- H-9 simulates failure of the **first** (host) transfer via `vm.mockCall`. State is unchanged before any funds move.
+- H-11 strengthens atomicity by simulating failure **after** two transfers have been made (host and first contributor). The EVM rolls back all state changes in the transaction, so all three balance assertions confirm Solidity's atomicity guarantee — not a custom try/catch mechanism.
+- Both tests use `vm.mockCall` to return `false` from `MockERC20.transfer()`, which `SafeERC20.safeTransfer` detects and reverts.
+- The `MockERC20` does not implement Circle's USDC blacklisting. A fork test against live Arc Testnet USDC would close that specific gap and is recommended before mainnet deployment.
 
 ---
 
@@ -277,24 +285,33 @@ cast chain-id --rpc-url https://rpc.mainnet.arc.io
 # Must return 5042. Stop if it returns anything else.
 ```
 
-**Step 2 — Estimate gas (dry run, no broadcast)**
+**Step 2 — Simulate deployment (dry run)**
+
+`forge create` defaults to **dry-run mode** — no transaction is submitted without the `--broadcast` flag. Run the command below as-is (without `--broadcast`) to check that it compiles, resolves, and estimates gas without sending anything onchain.
+
 ```bash
 forge create contracts/SessionSplit.sol:SessionSplit \
   --rpc-url https://rpc.mainnet.arc.io \
   --private-key $DEPLOYER_KEY \
   --constructor-args 0x3600000000000000000000000000000000000000
-# Remove --broadcast for a dry run. Review estimated gas before proceeding.
+# No --broadcast → dry run only. Nothing is sent onchain.
+# Review the estimated gas. Stop if any error appears.
 ```
 
-Note: `contracts/script/DeployCreate2.s.sol` is a CREATE2 helper script for deterministic addresses. It defines `run()` with no arguments (constructor args are read from env vars `FACTORY_ADDRESS`, `CREATE2_SALT`, `CREATION_CODE`). It is not used for a standard `forge create` deployment. Use `forge create` (Step 3) for a straightforward direct deployment.
+Note: `contracts/script/DeployCreate2.s.sol` is a CREATE2 helper for deterministic addresses. It defines `run()` with no arguments (constructor args come from env vars). It is not used here — Step 3 deploys directly with `forge create`.
 
-**Step 3 — Deploy**
+**Step 3 — Deploy (live broadcast, authorized personnel only)**
+
+**Do not run this step until Prerequisites 1–4 are satisfied and you have independently confirmed the dry run in Step 2 is error-free.**
+
 ```bash
 forge create contracts/SessionSplit.sol:SessionSplit \
   --rpc-url https://rpc.mainnet.arc.io \
   --private-key $DEPLOYER_KEY \
   --constructor-args 0x3600000000000000000000000000000000000000 \
   --broadcast
+# --broadcast submits the transaction to the network with real funds.
+# This action is irreversible.
 ```
 
 **Step 4 — Verify constructor argument**

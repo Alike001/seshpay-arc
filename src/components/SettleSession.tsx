@@ -19,6 +19,7 @@ import {
   useSwitchChain,
 } from "wagmi";
 import { Plus, Trash2, Loader2, ExternalLink, Info, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import { isAddress } from "viem";
 import { SESSION_SPLIT } from "@/contracts/sessionSplit";
 import { parseUsdcSafe, formatUsdcDisplay, formatAddress, formatDeadline, isDeadlinePassed, parseOnchainError } from "@/utils/format";
 import { buildTxExplorerUrl } from "@/onchain-facts";
@@ -119,6 +120,17 @@ export default function SettleSession() {
   const addresses = filledRows.map((c) => c.address.toLowerCase());
   const hasDuplicates = addresses.length !== new Set(addresses).size;
 
+  // Reject the contract address as a contributor — the original Arc Testnet
+  // contract has no withdrawal path; funds would be permanently locked.
+  // The hardened mainnet contract enforces this onchain too, but this check
+  // catches it before any wallet prompt.
+  // Note: this frontend guard cannot prevent direct contract calls.
+  const contractAddrRows = filledRows.filter(
+    (c) =>
+      isAddress(c.address) &&
+      c.address.toLowerCase() === SESSION_SPLIT.address.toLowerCase()
+  );
+
   // Total of all filled amounts
   const { totalAmountBig, parseError } = useMemo(() => {
     let total = 0n;
@@ -154,6 +166,7 @@ export default function SettleSession() {
     !showNotSponsor &&
     !notOpen &&
     !notFound &&
+    contractAddrRows.length === 0 &&
     // Fail closed: partial rows must be completed or removed before settlement.
     // Silently excluding partial rows would send a different transaction than
     // the user reviewed — block until every non-empty row is fully filled.
@@ -508,6 +521,14 @@ export default function SettleSession() {
                 : `${partialRows.length} rows are incomplete.`}{" "}
               Fill both wallet address and amount, or remove the row before settling.
               Settlement is blocked until all rows are complete.
+            </p>
+          )}
+
+          {contractAddrRows.length > 0 && (
+            <p className="mt-2 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
+              The contract address cannot be a contributor — funds sent to the
+              contract have no withdrawal path and would be permanently locked.
+              Remove that row before settling.
             </p>
           )}
 

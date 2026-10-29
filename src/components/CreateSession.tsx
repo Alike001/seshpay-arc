@@ -21,7 +21,7 @@ import {
   useWaitForTransactionReceipt,
   useSwitchChain,
 } from "wagmi";
-import { erc20Abi } from "viem";
+import { erc20Abi, isAddress } from "viem";
 import {
   Loader2,
   ExternalLink,
@@ -120,10 +120,19 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
     deadlineTs > 0n &&
     deadlineTs < nowAtDeadlineInput + MIN_DEADLINE_OFFSET;
 
+  // Reject the deployed contract address as host — the original Arc Testnet
+  // contract (immutable, no ContractAddress guard) would lock those funds
+  // permanently. The hardened mainnet contract also rejects this onchain,
+  // but this frontend check catches it before any wallet prompt.
+  // Note: frontend validation cannot prevent direct contract calls.
+  const hostIsContract =
+    isAddress(host) &&
+    host.toLowerCase() === SESSION_SPLIT.address.toLowerCase();
+
   const isValid =
     !parseError &&
-    host.startsWith("0x") &&
-    host.length === 42 &&
+    isAddress(host) &&
+    !hostIsContract &&
     hostPayoutBig > 0n &&
     deadlineTs > 0n &&
     !deadlineTooSoon &&
@@ -375,6 +384,12 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
           <p className="mt-1 text-xs" style={{ color: "var(--subtle)" }}>
             The host receives their fixed payout the moment you approve.
           </p>
+          {hostIsContract && (
+            <p className="mt-1 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
+              The contract address cannot be the host — funds sent to the contract
+              have no withdrawal path and would be permanently locked.
+            </p>
+          )}
         </label>
 
         {/* Payout amounts */}

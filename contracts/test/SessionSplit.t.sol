@@ -627,6 +627,103 @@ contract SessionSplitHardeningTest is SessionSplitTestBase {
     }
 
     // -----------------------------------------------------------------------
+    // H-11. testMidSettlementAtomicity
+    //       The host and first contributor are paid successfully, but the
+    //       second contributor's transfer is mocked to return false.
+    //       The ENTIRE settlement must revert:
+    //         - host balance unchanged
+    //         - first contributor balance unchanged
+    //         - contract balance unchanged
+    //         - session state remains OPEN
+    // -----------------------------------------------------------------------
+    function testMidSettlementAtomicity() public {
+        uint256 sessionId = _createSession();
+
+        address p1 = makeAddr("mid1");
+        address p2 = makeAddr("mid2");
+
+        address[] memory participants = new address[](2);
+        participants[0] = p1;
+        participants[1] = p2;
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 5e6;
+        amounts[1] = 5e6;
+
+        uint256 hostBefore     = token.balanceOf(host);
+        uint256 p1Before       = token.balanceOf(p1);
+        uint256 contractBefore = token.balanceOf(address(split));
+
+        // Mock the transfer to p2 to return false, simulating a blacklist.
+        // After host payout and p1 payout succeed, the p2 transfer fails.
+        vm.mockCall(
+            address(token),
+            abi.encodeWithSelector(token.transfer.selector, p2, amounts[1]),
+            abi.encode(false)
+        );
+
+        vm.prank(sponsor);
+        vm.expectRevert(); // SafeERC20 wraps false return as revert
+        split.settle(sessionId, participants, amounts);
+
+        vm.clearMockedCalls();
+
+        // All balances must be unchanged — the entire tx was atomic
+        assertEq(token.balanceOf(host),          hostBefore,     "host unchanged after mid-revert");
+        assertEq(token.balanceOf(p1),            p1Before,       "p1 unchanged after mid-revert");
+        assertEq(token.balanceOf(address(split)), contractBefore, "contract unchanged after mid-revert");
+
+        // Session must still be OPEN
+        (,,,,,SessionSplit.SessionState stateAfterMidRevert) = split.sessions(sessionId);
+        assertEq(
+            uint8(stateAfterMidRevert),
+            uint8(SessionSplit.SessionState.OPEN),
+            "state OPEN after mid-revert"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // H-12. testFailedRefundTransfer
+    //       If the refund transfer to the sponsor returns false, the entire
+    //       refund reverts and the session remains OPEN.
+    // -----------------------------------------------------------------------
+    function testRefundTransferFailureRollback() public {
+        uint256 sessionId = _createSession();
+
+        // Warp past the deadline
+        vm.warp(DEADLINE + 1);
+
+        uint256 sponsorBefore  = token.balanceOf(sponsor);
+        uint256 contractBefore = token.balanceOf(address(split));
+
+        // Mock the refund transfer to return false
+        uint256 totalRefund = HOST_PAYOUT + REWARD_BUDGET;
+        vm.mockCall(
+            address(token),
+            abi.encodeWithSelector(token.transfer.selector, sponsor, totalRefund),
+            abi.encode(false)
+        );
+
+        vm.prank(sponsor);
+        vm.expectRevert();
+        split.refund(sessionId);
+
+        vm.clearMockedCalls();
+
+        // Balances unchanged
+        assertEq(token.balanceOf(sponsor),        sponsorBefore,  "sponsor unchanged");
+        assertEq(token.balanceOf(address(split)), contractBefore, "contract unchanged");
+
+        // State still OPEN
+        (,,,,,SessionSplit.SessionState stateAfterFailedRefund) = split.sessions(sessionId);
+        assertEq(
+            uint8(stateAfterFailedRefund),
+            uint8(SessionSplit.SessionState.OPEN),
+            "state OPEN after failed refund"
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // H-10. testAccountingInvariant (fuzz)
     //       For any valid (hostPayout, rewardBudget, participantCount,
     //       amounts[]) combination, funds-in == funds-out exactly.
