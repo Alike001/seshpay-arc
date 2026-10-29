@@ -247,3 +247,174 @@ describe("known limitation — frontend cannot prevent direct calls", () => {
     expect(src).toContain("cannot prevent direct contract calls");
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. Contributor address validation (rowAddressValid logic regression tests)
+//
+//    Mirrors the rowAddressValid() function and filledRows/invalidAddrRows/
+//    zeroAddrRows derivations in SettleSession.tsx. Tests verify that
+//    viem isAddress replaces the previous startsWith("0x") && length === 42
+//    approach, which silently accepted malformed addresses.
+// ---------------------------------------------------------------------------
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const VALID_EOA    = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+
+// Mirror rowAddressValid from SettleSession.tsx
+function rowAddressValid(addr: string): boolean {
+  return isAddress(addr) && addr.toLowerCase() !== ZERO_ADDRESS;
+}
+
+type Row = { address: string; amount: string };
+
+function classifyRows(rows: Row[], contractAddr: string) {
+  const filledRows   = rows.filter(c => rowAddressValid(c.address) && c.amount.trim() !== "" && c.amount.trim() !== "0");
+  const invalidRows  = rows.filter(c => c.address !== "" && !isAddress(c.address));
+  const zeroRows     = rows.filter(c => isAddress(c.address) && c.address.toLowerCase() === ZERO_ADDRESS);
+  const contractRows = filledRows.filter(c => isAddress(c.address) && c.address.toLowerCase() === contractAddr.toLowerCase());
+  const partialRows  = rows.filter(c =>
+    (c.address !== "" || c.amount !== "") &&
+    !filledRows.includes(c) &&
+    !invalidRows.includes(c) &&
+    !zeroRows.includes(c)
+  );
+  const addrs        = filledRows.map(c => c.address.toLowerCase());
+  const hasDuplicates = addrs.length !== new Set(addrs).size;
+  return { filledRows, invalidRows, zeroRows, contractRows, partialRows, hasDuplicates };
+}
+
+describe("rowAddressValid — address classification", () => {
+  it("accepts a valid all-lowercase EVM address", () => {
+    expect(rowAddressValid("0xd8da6bf26964af9d7eed9e03e53415d37aa96045")).toBe(true);
+  });
+
+  it("accepts a valid EIP-55 checksummed address", () => {
+    expect(rowAddressValid(VALID_EOA)).toBe(true);
+  });
+
+  it("rejects the zero address", () => {
+    expect(rowAddressValid(ZERO_ADDRESS)).toBe(false);
+  });
+
+  it("rejects a truncated address (only 20 chars after 0x)", () => {
+    expect(rowAddressValid("0x0fe8a41346ab7aa30dc1")).toBe(false);
+  });
+
+  it("rejects an address with non-hex characters", () => {
+    expect(rowAddressValid("0xZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ")).toBe(false);
+  });
+
+  it("rejects an empty string", () => {
+    expect(rowAddressValid("")).toBe(false);
+  });
+
+  it("rejects an address that is 42 chars but contains a typo (wrong checksum)", () => {
+    // All-uppercase passes length/prefix check but fails EIP-55 strict checksum
+    const badChecksum = "0xD8DA6BF26964AF9D7EED9E03E53415D37AA96045";
+    expect(isAddress(badChecksum)).toBe(false);
+    expect(rowAddressValid(badChecksum)).toBe(false);
+  });
+});
+
+describe("filledRows — only valid, non-zero, non-empty rows reach calldata", () => {
+  it("accepts a valid address with a non-zero amount", () => {
+    const { filledRows } = classifyRows([{ address: VALID_EOA, amount: "1.00" }], CONTRACT_ADDRESS);
+    expect(filledRows).toHaveLength(1);
+  });
+
+  it("excludes a malformed address from filledRows", () => {
+    const { filledRows, invalidRows } = classifyRows(
+      [{ address: "0xNOTVALID", amount: "1.00" }],
+      CONTRACT_ADDRESS
+    );
+    expect(filledRows).toHaveLength(0);
+    expect(invalidRows).toHaveLength(1);
+  });
+
+  it("excludes the zero address from filledRows", () => {
+    const { filledRows, zeroRows } = classifyRows(
+      [{ address: ZERO_ADDRESS, amount: "1.00" }],
+      CONTRACT_ADDRESS
+    );
+    expect(filledRows).toHaveLength(0);
+    expect(zeroRows).toHaveLength(1);
+  });
+
+  it("excludes a row with zero amount from filledRows (partial)", () => {
+    const { filledRows, partialRows } = classifyRows(
+      [{ address: VALID_EOA, amount: "0" }],
+      CONTRACT_ADDRESS
+    );
+    expect(filledRows).toHaveLength(0);
+    expect(partialRows).toHaveLength(1);
+  });
+
+  it("excludes a row with empty amount from filledRows (partial)", () => {
+    const { filledRows, partialRows } = classifyRows(
+      [{ address: VALID_EOA, amount: "" }],
+      CONTRACT_ADDRESS
+    );
+    expect(filledRows).toHaveLength(0);
+    expect(partialRows).toHaveLength(1);
+  });
+
+  it("detects contract address in contractRows (not a zero-addr or invalid-addr)", () => {
+    const { filledRows, contractRows } = classifyRows(
+      [{ address: CONTRACT_ADDRESS, amount: "1.00" }],
+      CONTRACT_ADDRESS
+    );
+    expect(filledRows).toHaveLength(1);  // contract addr IS isAddress-valid
+    expect(contractRows).toHaveLength(1);
+  });
+
+  it("detects duplicate addresses in filledRows", () => {
+    const { hasDuplicates } = classifyRows(
+      [
+        { address: VALID_EOA, amount: "1.00" },
+        { address: VALID_EOA, amount: "2.00" },
+      ],
+      CONTRACT_ADDRESS
+    );
+    expect(hasDuplicates).toBe(true);
+  });
+
+  it("does not flag duplicates for two different valid addresses", () => {
+    const other = "0x3600000000000000000000000000000000000000";
+    const { hasDuplicates } = classifyRows(
+      [
+        { address: VALID_EOA, amount: "1.00" },
+        { address: other, amount: "2.00" },
+      ],
+      CONTRACT_ADDRESS
+    );
+    expect(hasDuplicates).toBe(false);
+  });
+});
+
+describe("SettleSession.tsx — uses isAddress for contributor validation", () => {
+  const src = readSrc("src/components/SettleSession.tsx");
+
+  it("uses rowAddressValid with isAddress (not startsWith check)", () => {
+    expect(src).toContain("isAddress(addr)");
+    // The old pattern must not remain as the primary address gate
+    expect(src).not.toContain('c.address.startsWith("0x") &&\n      c.address.length === 42');
+  });
+
+  it("derives invalidAddrRows to catch malformed addresses", () => {
+    expect(src).toContain("invalidAddrRows");
+    expect(src).toContain("invalidAddrRows.length === 0");
+  });
+
+  it("derives zeroAddrRows to reject the zero address", () => {
+    expect(src).toContain("zeroAddrRows");
+    expect(src).toContain("zeroAddrRows.length === 0");
+  });
+
+  it("renders a role=alert error for invalid addresses", () => {
+    expect(src).toContain("invalidAddrRows.length > 0");
+  });
+
+  it("renders a role=alert error for the zero address", () => {
+    expect(src).toContain("zeroAddrRows.length > 0");
+  });
+});
