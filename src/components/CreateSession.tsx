@@ -35,7 +35,7 @@ import {
 import { Link } from "react-router-dom";
 import { getUsdc, buildTxExplorerUrl } from "@/onchain-facts";
 import { SESSION_SPLIT } from "@/contracts/sessionSplit";
-import { ACTIVE_CHAIN_ID } from "@/config";
+import { ACTIVE_CHAIN_ID, IS_MAINNET } from "@/config";
 import {
   parseUsdcSafe,
   formatUsdcDisplay,
@@ -45,10 +45,18 @@ import {
 } from "@/utils/format";
 import { extractSessionId, buildEventUrl } from "@/utils/eventId";
 import { glass } from "@/utils/styles";
+import MainnetAckModal, { isMainnetAcknowledged } from "@/components/MainnetAckModal";
 
 export default function CreateSession({ onCreated }: { onCreated: () => void }) {
   const { address, chainId } = useAccount();
   const { switchChain } = useSwitchChain();
+
+  // On mainnet, the form is gated behind an explicit risk acknowledgement.
+  // isMainnetAcknowledged() reads sessionStorage so the modal is only shown once
+  // per browser session, not on every re-render.
+  const [ackDone, setAckDone] = useState<boolean>(
+    !IS_MAINNET || isMainnetAcknowledged()
+  );
 
   const [host, setHost] = useState("");
   const [hostPayout, setHostPayout] = useState("");
@@ -351,6 +359,12 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
 
   // ── Form ───────────────────────────────────────────────────────────────────
   return (
+    <>
+      {/* Mainnet risk acknowledgement modal — shown once per session on mainnet */}
+      {IS_MAINNET && !ackDone && (
+        <MainnetAckModal onAcknowledged={() => setAckDone(true)} />
+      )}
+
     <div className="rounded-3xl p-6" style={glass.card}>
       <div className="h-1 w-10 rounded-full mb-5"
         style={{ background: "linear-gradient(90deg,#c4a7e2,#9fc4e8)" }} />
@@ -617,5 +631,6 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
         )}
       </div>
     </div>
+    </>
   );
 }

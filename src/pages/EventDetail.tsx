@@ -32,8 +32,9 @@ import {
 } from "@/utils/format";
 import { buildEventUrl } from "@/utils/eventId";
 import { glass } from "@/utils/styles";
-import { ACTIVE_CHAIN_ID } from "@/config";
+import { ACTIVE_CHAIN_ID, IS_MAINNET } from "@/config";
 import { requireChain } from "@/onchain-facts";
+import MainnetPilotBanner from "@/components/MainnetPilotBanner";
 
 const { explorerBase } = requireChain(ACTIVE_CHAIN_ID);
 const CONTRACT_EXPLORER = `${explorerBase}/address/${SESSION_SPLIT.address}`;
@@ -502,6 +503,7 @@ function PageShell({
       className="min-h-dvh"
       style={{ background: "var(--bg-gradient)" }}
     >
+      {IS_MAINNET && <MainnetPilotBanner />}
       {/* Minimal header */}
       <header
         className="sticky top-0 z-30 w-full px-4 py-3"

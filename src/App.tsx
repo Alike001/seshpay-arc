@@ -20,6 +20,7 @@ import PayContributors from "@/components/SettleSession";
 import RecoverFunds from "@/components/RefundSession";
 import MyEvents from "@/components/SessionStatus";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import MainnetPilotBanner from "@/components/MainnetPilotBanner";
 
 type Tab = "create" | "pay" | "recover" | "events";
 
@@ -58,6 +59,7 @@ export default function App() {
 
   return (
     <div className="min-h-dvh" style={{ background: "var(--bg-gradient)" }}>
+      {IS_MAINNET && <MainnetPilotBanner />}
       <Header />
 
       <main className="mx-auto w-full max-w-xl px-4 pt-5 pb-7">

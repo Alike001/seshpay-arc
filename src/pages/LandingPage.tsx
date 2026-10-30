@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import LandingHeader from "@/components/LandingHeader";
+import MainnetPilotBanner from "@/components/MainnetPilotBanner";
+import { IS_MAINNET } from "@/config";
 
 /* ─── tiny design tokens (mirror index.css vars) ─────────────────────── */
 const ink   = "var(--ink)";
@@ -253,6 +255,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-dvh" style={{ background: "var(--bg-gradient)" }}>
+      {IS_MAINNET && <MainnetPilotBanner />}
       <LandingHeader
         onHowItWorks={() => scrollTo(howRef)}
         onUseCases={() => scrollTo(useCaseRef)}
@@ -585,9 +588,15 @@ export default function LandingPage() {
           </nav>
 
           {/* Disclaimer */}
-          <p className="text-xs" style={{ color: "var(--subtle)" }}>
-            Arc Testnet only — no real funds.
-          </p>
+          {IS_MAINNET ? (
+            <p className="text-xs font-semibold" style={{ color: "#b45200" }}>
+              Unaudited mainnet pilot — use at your own risk.
+            </p>
+          ) : (
+            <p className="text-xs" style={{ color: "var(--subtle)" }}>
+              Arc Testnet only — no real funds.
+            </p>
+          )}
         </div>
       </footer>
     </div>

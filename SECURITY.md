@@ -2,9 +2,21 @@
 
 ## Project status
 
-SeshPay is an Arc Testnet MVP. The application currently operates exclusively on Arc Testnet using test USDC. **It has not been deployed to Arc Mainnet and has not been reviewed by an external security firm.**
+SeshPay was developed as an Arc Testnet MVP. A limited, **unaudited** mainnet pilot is now being prepared at the owner's discretion as an experimental demonstration for Arc Microgrants. This pilot is self-funded and operates at the owner's risk.
 
-Do not use SeshPay with real funds on any network until an independent professional security audit has been completed and the results have been reviewed.
+**Previous policy:** Real-fund use required a completed independent professional security audit before any mainnet deployment.
+
+**Current status:** The owner has decided to proceed with a limited mainnet pilot without a prior professional audit. This decision was made knowingly and does not imply that the contract is free of defects. An independent professional security audit remains a prerequisite for any broader, public-facing production launch.
+
+**What this means for users:**
+- The smart contract has not been reviewed by an independent security firm.
+- Automated tests were written by the same developer who wrote the contract — they confirm expected behaviour but do not constitute an independent audit.
+- Real USDC can be lost if the contract contains undiscovered bugs.
+- Sponsor approval is discretionary — hosts and contributors have no recourse if the sponsor does not settle before the deadline.
+- USDC transfers to blacklisted addresses will revert the entire transaction, which can temporarily lock funds.
+- The pilot uses the smallest viable deposit amounts consistent with demonstrating the payout flow.
+
+Do not use SeshPay with funds you cannot afford to lose. This is an experimental prototype, not an audited production application.
 
 ---
 
@@ -32,7 +44,7 @@ The following are out of scope:
 
 ## Automated tests are not a security audit
 
-The repository includes 162 passing automated tests (16 Foundry + 146 Bun tests, verified 2026-10-27). These tests were written by the same developer who wrote the contract and frontend. They confirm expected behaviour and regression coverage but **do not constitute an independent security audit**. A professional third-party audit is required before any deployment involving real funds.
+The repository includes 222 passing automated tests (29 Foundry + 193 Bun tests, verified 2026-10-30). These tests were written by the same developer who wrote the contract and frontend. They confirm expected behaviour and regression coverage but **do not constitute an independent security audit**. A professional third-party audit remains a prerequisite for any broader production launch involving real funds at scale.
 
 ---
 
