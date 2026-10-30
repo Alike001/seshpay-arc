@@ -562,7 +562,7 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
               {!isConnected
                 ? "Connect your wallet to continue"
                 : wrongChain
-                ? "Switch to Arc Testnet"
+                ? (IS_MAINNET ? "Switch to Arc Mainnet" : "Switch to Arc Testnet")
                 : approving
                 ? <span className="flex items-center justify-center gap-2">
                     <Loader2 className="size-4 animate-spin" /> Confirm in wallet…

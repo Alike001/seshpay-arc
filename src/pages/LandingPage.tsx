@@ -131,7 +131,7 @@ function AppPreview() {
         className="px-4 py-2 text-center text-[9px] font-medium"
         style={{ background: "rgba(18,45,69,0.03)", color: muted, borderTop: "1px solid rgba(18,45,69,0.05)" }}
       >
-        Arc Testnet only — no real funds
+        {IS_MAINNET ? "Arc Mainnet — real USDC" : "Arc Testnet only — no real funds"}
       </div>
     </div>
   );
@@ -182,15 +182,21 @@ const USE_CASES = [
 const FAQS = [
   {
     q: "Which wallet do I need?",
-    a: "Any EVM-compatible browser wallet that supports custom networks (MetaMask, Rabby, or similar). You will need to add Arc Testnet as a custom network and hold testnet USDC.",
+    a: IS_MAINNET
+      ? "An EVM-compatible wallet such as MetaMask or Rabby, connected to Arc Mainnet (chain ID 5042) with real USDC for transactions and gas."
+      : "Any EVM-compatible browser wallet that supports custom networks (MetaMask, Rabby, or similar). You will need to add Arc Testnet as a custom network and hold testnet USDC.",
   },
   {
-    q: "Where do I get testnet USDC?",
-    a: 'Use the "Get test USDC" button in the Arc Studio sidebar when previewing the app, or visit the Arc Testnet faucet. Testnet USDC has no real-world value.',
+    q: IS_MAINNET ? "How do I get USDC on Arc Mainnet?" : "Where do I get testnet USDC?",
+    a: IS_MAINNET
+      ? "Use a wallet or transfer service that explicitly supports USDC on Arc Mainnet. Check the network and recipient carefully; transactions use real USDC, including for gas."
+      : 'Use the "Get test USDC" button in the Arc Studio sidebar when previewing the app, or visit the Arc Testnet faucet. Testnet USDC has no real-world value.',
   },
   {
     q: "Does SeshPay charge a fee?",
-    a: "No. The contract has no platform fee and no admin address. The only cost is the Arc Testnet gas fee, which is paid in USDC and is typically a fraction of a cent.",
+    a: IS_MAINNET
+      ? "No. The contract has no platform fee and no admin address. Arc Mainnet transaction gas fees are paid in USDC."
+      : "No. The contract has no platform fee and no admin address. The only cost is the Arc Testnet gas fee, which is paid in USDC and is typically a fraction of a cent.",
   },
   {
     q: "Who approves payouts?",
@@ -279,7 +285,7 @@ export default function LandingPage() {
           <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-6"
             style={{ background: "rgba(16,97,166,0.08)", border: "1px solid rgba(16,97,166,0.15)" }}>
             <span className="size-1.5 rounded-full" style={{ background: accH }} aria-hidden="true" />
-            <span className="text-xs font-semibold" style={{ color: accH }}>Arc Testnet — USDC native</span>
+            <span className="text-xs font-semibold" style={{ color: accH }}>{IS_MAINNET ? "Arc Mainnet — real USDC" : "Arc Testnet — USDC native"}</span>
           </div>
 
           <h1
@@ -360,7 +366,7 @@ export default function LandingPage() {
             </p>
             <p className="text-sm text-pretty leading-relaxed" style={{ color: muted }}>
               Connect a wallet and click <strong style={{ color: ink }}>Launch App</strong> to
-              interact with the live contract on Arc Testnet.
+              interact with the live contract on {IS_MAINNET ? "Arc Mainnet" : "Arc Testnet"}.
             </p>
           </div>
           <div className="w-full max-w-sm lg:max-w-xs xl:max-w-sm">
@@ -442,7 +448,9 @@ export default function LandingPage() {
               },
               {
                 title: "No platform fee",
-                body: "The contract contains no fee logic and no platform address. The only cost to create or settle is Arc Testnet gas, paid in USDC.",
+                body: IS_MAINNET
+                  ? "The contract contains no fee logic and no platform address. Arc Mainnet transaction gas is paid in real USDC."
+                  : "The contract contains no fee logic and no platform address. The only cost to create or settle is Arc Testnet gas, paid in USDC.",
               },
             ].map((item) => (
               <Card key={item.title} className="flex gap-3 items-start">
@@ -527,7 +535,9 @@ export default function LandingPage() {
             Ready to run your first event?
           </h2>
           <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.72)" }}>
-            Arc Testnet only. No real funds. Get testnet USDC from the faucet and create your first event in minutes.
+            {IS_MAINNET
+              ? "Arc Mainnet beta. Transactions use real USDC and the contract is unaudited. Review the risks before funding an event."
+              : "Arc Testnet only. No real funds. Get testnet USDC from the faucet and create your first event in minutes."}
           </p>
           <Link
             to="/app"
@@ -568,7 +578,9 @@ export default function LandingPage() {
               Launch App
             </Link>
             <a
-              href="https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c"
+              href={IS_MAINNET
+                ? "https://explorer.arc.io/address/0xd02bc329d5cfe93e841ea2c925520ef864621c4c"
+                : "https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c"}
               target="_blank"
               rel="noreferrer"
               className="text-xs font-medium hover:underline"
