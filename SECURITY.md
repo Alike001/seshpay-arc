@@ -13,7 +13,7 @@ SeshPay was developed as an Arc Testnet MVP. A limited, **unaudited** mainnet pi
 - Automated tests were written by the same developer who wrote the contract — they confirm expected behaviour but do not constitute an independent audit.
 - Real USDC can be lost if the contract contains undiscovered bugs.
 - Sponsor approval is discretionary — hosts and contributors have no recourse if the sponsor does not settle before the deadline.
-- USDC transfers to blacklisted addresses will revert the entire transaction, which can temporarily lock funds.
+- USDC transfers to blacklisted addresses will revert the entire transaction, which can lock funds indefinitely, potentially permanently.
 - The pilot uses the smallest viable deposit amounts consistent with demonstrating the payout flow.
 
 Do not use SeshPay with funds you cannot afford to lose. This is an experimental prototype, not an audited production application.
@@ -81,7 +81,8 @@ A useful security report includes:
 ## What not to include
 
 - **Never share seed phrases, private keys, or wallet secrets** in a report or anywhere in this repository.
-- Do not include real transaction hashes from mainnet operations involving real funds.
+- Do not include third-party transaction hashes, wallet addresses, or any private or sensitive information belonging to users other than the reporter.
+- The owner's own consented mainnet demonstration transactions may be shared publicly for hackathon verification purposes. Sharing those transaction hashes and the verified contract address is permitted and expected.
 - Do not disclose the vulnerability in a public issue, pull request, or social media post before it has been acknowledged and a fix has been agreed upon.
 
 ---

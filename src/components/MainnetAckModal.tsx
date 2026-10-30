@@ -24,7 +24,7 @@ interface Props {
 const RISKS = [
   "This contract has not been reviewed by an independent security firm. Real USDC may be lost if the contract contains undiscovered bugs.",
   "Sponsor approval is discretionary. The host and contributors have no recourse inside the contract if the sponsor does not settle before the deadline.",
-  "If Circle restricts a recipient address, any transfer to that address will revert the entire settlement or refund transaction, temporarily locking all funds.",
+  "If Circle restricts a recipient address, any transfer to that address will revert the entire settlement or refund transaction, locking all funds indefinitely, potentially permanently.",
   "Any suggested deposit limit is frontend guidance only, not an onchain restriction. The contract accepts any amount the sponsor approves.",
   "Blockchain transactions are irreversible. There is no undo once a transaction is confirmed.",
 ] as const;

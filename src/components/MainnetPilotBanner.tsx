@@ -33,7 +33,8 @@ export default function MainnetPilotBanner() {
             This contract has not been reviewed by an independent security firm.
             Real USDC may be lost. Sponsor approval is discretionary — hosts and
             contributors have no recourse if the sponsor does not settle before
-            the deadline. Restricted USDC transfers can temporarily lock funds.
+            the deadline. Restricted USDC transfers can lock funds indefinitely,
+            potentially permanently.
             Do not deposit more than you can afford to lose.
           </p>
         </div>
