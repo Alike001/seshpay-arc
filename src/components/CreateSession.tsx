@@ -396,7 +396,7 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
             aria-label="Host wallet address"
           />
           <p className="mt-1 text-xs" style={{ color: "var(--subtle)" }}>
-            The host receives their fixed payout the moment you approve.
+            The host receives their payout when the sponsor settles the event.
           </p>
           {hostIsContract && (
             <p className="mt-1 text-xs font-semibold" style={{ color: "var(--danger)" }} role="alert">
