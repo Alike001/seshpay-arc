@@ -2,7 +2,7 @@
 
 ## Project status
 
-SeshPay was developed as an Arc Testnet MVP. A limited, **unaudited** mainnet pilot is now being prepared at the owner's discretion as an experimental demonstration for Arc Microgrants. This pilot is self-funded and operates at the owner's risk.
+SeshPay was developed as an Arc Testnet MVP. A limited, **unaudited** mainnet pilot was deployed on October 30, 2026 at the owner's discretion as an experimental demonstration for Arc Microgrants. This pilot is self-funded and operates at the owner's risk.
 
 **Previous policy:** Real-fund use required a completed independent professional security audit before any mainnet deployment.
 

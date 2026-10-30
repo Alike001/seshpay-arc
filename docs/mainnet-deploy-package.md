@@ -14,6 +14,12 @@
 
 ---
 
+## Subsequent outcome — October 30, 2026
+
+This is a **historical predeployment runbook**. The owner later elected a limited, explicitly unaudited mainnet pilot under an updated [`SECURITY.md`](../SECURITY.md) policy. The contract has **already been deployed** on Arc Mainnet at [`0xd02bc329d5cfe93e841ea2c925520ef864621c4c`](https://explorer.arc.io/address/0xd02bc329d5cfe93e841ea2c925520ef864621c4c); [deployment transaction](https://explorer.arc.io/tx/0x78fcb1fadb4d888c3f979a3ecee9dc093d2346c615cc1429b226d9b18e3b136b). **Do not rerun the broadcast instructions below.** The old B-1 gate and predeployment checklist are preserved as written to document the original security assessment and are not evidence of an independent audit. Current mainnet evidence is in the [README](../README.md#verified-arc-mainnet-transactions--event-1-october-30-2026).
+
+---
+
 ## Reference bytecode hashes (hardened artifact, main commit b7c3bf3)
 
 These were computed on 2026-10-29 from the compiled artifact at

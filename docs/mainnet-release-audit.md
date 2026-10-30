@@ -8,6 +8,19 @@
 
 ---
 
+## Status update — October 30, 2026 (after the historical predeployment assessment)
+
+**An unaudited, owner-funded Arc Mainnet pilot was deployed**, despite the original October 28 **NO-GO** recommendation. The original assessment below is retained as a historical record, not rewritten as if independent audit blocker B-1 had been cleared.
+
+- Arc Mainnet contract: [`0xd02bc329d5cfe93e841ea2c925520ef864621c4c`](https://explorer.arc.io/address/0xd02bc329d5cfe93e841ea2c925520ef864621c4c?tab=contract), deployed in block **28,629,917** ([transaction](https://explorer.arc.io/tx/0x78fcb1fadb4d888c3f979a3ecee9dc093d2346c615cc1429b226d9b18e3b136b)); Solidity source published with an **exact compiler-bytecode match** on Arc Explorer.
+- Runtime SHA-256 was independently checked against the hardened release artifact: `e2ba445af6cb74d98bb791c1f3ef3aad27ed8291ffc2f6298e4e20202ae6c46d`.
+- Event #1 creation and 0.020 USDC funding: block **28,637,987**, [transaction](https://explorer.arc.io/tx/0xa7208b293d0024e902fe8bdd6a7cf26f6cf4f1d5208bc6bd4a1ec12e36cb67f8).
+- Event #1 settlement: block **28,638,706**, [transaction](https://explorer.arc.io/tx/0xcd74348927ddb49bfb35e220d9b65e57be2838a0a115f1ad5dd253ce2a89718d). Onchain logs record 0.010 USDC host payout, 0.006 USDC contributor payout, and 0.004 USDC returned to sponsor.
+- B-2 (deployed address), B-3 (controlled mainnet end-to-end flow), and B-4 (dedicated deployer) have subsequently been addressed. **B-1 remains outstanding:** no independent professional security audit has been performed.
+- The current limited-pilot policy is in [`SECURITY.md`](../SECURITY.md). It does **not** mean the contract is production-audited or free of fund-lock risks.
+
+---
+
 ## 1. Scope
 
 This audit covers:

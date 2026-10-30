@@ -96,6 +96,22 @@ Only the sponsor wallet (the one that called `createSession`) can approve payout
 
 ---
 
+## Verified Arc Mainnet transactions — Event #1 (October 30, 2026)
+
+SeshPay's unaudited, owner-funded Arc Mainnet pilot completed a real-USDC create-and-settle flow through the public application. Receipts and `SessionCreated`, `ParticipantPaid`, and `SessionSettled` logs were checked using read-only Arc Mainnet RPC calls; the amounts below use the 6-decimal ERC-20 USDC representation.
+
+| Step | Transaction | Block | Evidence |
+|---|---|---:|---|
+| Contract deployment | [`0x78fcb1fa...136b`](https://explorer.arc.io/tx/0x78fcb1fadb4d888c3f979a3ecee9dc093d2346c615cc1429b226d9b18e3b136b) | 28,629,917 | [Verified contract source](https://explorer.arc.io/address/0xd02bc329d5cfe93e841ea2c925520ef864621c4c?tab=contract) |
+| Event #1 created and funded (0.020 USDC) | [`0xa7208b29...67f8`](https://explorer.arc.io/tx/0xa7208b293d0024e902fe8bdd6a7cf26f6cf4f1d5208bc6bd4a1ec12e36cb67f8) | 28,637,987 | Successful receipt and `SessionCreated` log |
+| Event #1 settled | [`0xcd743489...718d`](https://explorer.arc.io/tx/0xcd74348927ddb49bfb35e220d9b65e57be2838a0a115f1ad5dd253ce2a89718d) | 28,638,706 | Successful receipt, `ParticipantPaid` and `SessionSettled` logs |
+
+**Verified settlement breakdown:** 0.010 USDC to the host, 0.006 USDC to one contributor, and 0.004 USDC of unused reward budget returned to the sponsor. The sum equals the original **0.020 USDC deposit**. [View Event #1 in the live app](https://seshpay.vercel.app/app/events/1) (read-only; no wallet required).
+
+**Security status:** Mainnet pilot is **unaudited**. Exact source-code verification on Arc Explorer and successful transactions do not constitute a professional security audit. The pilot is not an endorsement for unrestricted public deposits; see [SECURITY.md](SECURITY.md).
+
+---
+
 ## Verified testnet transactions
 
 Two complete Arc Testnet flows have been independently verified by raw `eth_getLogs` RPC scan and receipt decoding. All transactions use test USDC only.
@@ -233,9 +249,9 @@ The application is deployed to Vercel at [seshpay.vercel.app](https://seshpay.ve
 
 For Netlify: `public/_redirects` contains `/* /index.html 200`.
 
-The production Vercel deployment targets Arc Testnet by default (`VITE_NETWORK` unset). To switch to the mainnet pilot, set `VITE_NETWORK=mainnet` in the Vercel project's environment variables and redeploy. The mainnet contract address (`0xd02bc329d5cfe93e841ea2c925520ef864621c4c`) is already recorded in `src/contracts/sessionSplit.ts` — no source change is needed.
+The production Vercel application currently targets **Arc Mainnet** (`VITE_NETWORK=mainnet`). For local/testnet builds, the default is Arc Testnet if `VITE_NETWORK` is unset. The verified mainnet contract address is recorded in `src/contracts/sessionSplit.ts`.
 
-The mainnet build is an **unaudited pilot**. The unaudited-pilot banner and five-checkbox risk acknowledgement are shown automatically on every page when `VITE_NETWORK=mainnet`.
+The mainnet build is an **unaudited pilot**. A risk banner is displayed on mainnet pages, and the Create Event funding form requires a risk acknowledgement before interaction. See [SECURITY.md](SECURITY.md).
 
 ---
 
