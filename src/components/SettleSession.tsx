@@ -21,7 +21,7 @@ import {
 import { Plus, Trash2, Loader2, ExternalLink, Info, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { isAddress } from "viem";
 import { SESSION_SPLIT } from "@/contracts/sessionSplit";
-import { parseUsdcSafe, formatUsdcDisplay, formatAddress, formatDeadline, isDeadlinePassed, parseOnchainError } from "@/utils/format";
+import { formatUsdc, parseUsdcSafe, formatUsdcDisplay, formatAddress, formatDeadline, isDeadlinePassed, parseOnchainError } from "@/utils/format";
 import { buildTxExplorerUrl } from "@/onchain-facts";
 import { glass } from "@/utils/styles";
 import { normaliseSession, isSponsor } from "@/utils/sessionDecode";
@@ -283,14 +283,14 @@ export default function SettleSession() {
           {remainingBudget !== undefined && remainingBudget > 0n && (
             <ReceiptRow
               label={`Unused budget → sponsor (${formatAddress(fetchedSession.sponsor)})`}
-              value={`${formatUsdcDisplay(remainingBudget)} USDC`}
+              value={`${formatUsdc(remainingBudget)} USDC`}
               accent="var(--muted)"
             />
           )}
           <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
             <ReceiptRow
-              label="Total distributed"
-              value={`${formatUsdcDisplay(fetchedSession.hostPayout + totalAmountBig)} USDC`}
+              label="Paid to host + contributors"
+              value={`${formatUsdc(fetchedSession.hostPayout + totalAmountBig)} USDC`}
             />
           </div>
           <ReceiptRow label="Status" value="Settled — payouts distributed" accent="var(--success)" />
