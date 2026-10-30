@@ -4,7 +4,7 @@
 
 SeshPay is a sponsor-controlled USDC payout application built on [Arc](https://arc.io), Circle's blockchain where USDC is the native gas token. Sponsors deposit funds on-chain before a session starts, then approve exactly who gets paid and how much after it ends — nothing is released automatically. If the approval deadline passes without a settlement, the sponsor can recover their full deposit.
 
-Built with [Arc Studio](https://studio.arc.io) &middot; Currently running on **Arc Testnet** (test USDC only)
+Built with [Arc Studio](https://studio.arc.io) &middot; **Unaudited mainnet pilot** on Arc Mainnet — real USDC
 
 ---
 
@@ -16,7 +16,8 @@ Built with [Arc Studio](https://studio.arc.io) &middot; Currently running on **A
 | **Application** | [seshpay.vercel.app/app](https://seshpay.vercel.app/app) |
 | **GitHub** | [github.com/Alike001/seshpay-arc](https://github.com/Alike001/seshpay-arc) |
 | **Arc Studio project** | [studio.arc.io/app/d819f5b0-04cf-4a1b-a6fa-cb01b4270952](https://studio.arc.io/app/d819f5b0-04cf-4a1b-a6fa-cb01b4270952) |
-| **Contract on ArcScan** | [explorer.testnet.arc.io/address/0x0fe8a...1713c](https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c) |
+| **Mainnet contract** | [explorer.arc.io/address/0xd02bc...1c4c](https://explorer.arc.io/address/0xd02bc329d5cfe93e841ea2c925520ef864621c4c) |
+| **Testnet contract** | [explorer.testnet.arc.io/address/0x0fe8a...1713c](https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c) |
 
 ---
 
@@ -64,19 +65,34 @@ Only the sponsor wallet (the one that called `createSession`) can approve payout
 
 ## Contract
 
+> **Unaudited mainnet pilot.** This contract has not been reviewed by an independent security firm. Real USDC may be lost. Do not deposit funds you cannot afford to lose.
+
+### Arc Mainnet (active)
+
 | Property | Value |
 |---|---|
 | **Contract name** | `SessionSplit` |
-| **Network** | Arc Testnet |
-| **Chain ID** | `5042002` |
-| **Address** | [`0x0fe8a41346ab7aa30dc183384a85b5e36051713c`](https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c) |
-| **USDC (ERC-20)** | [`0x3600000000000000000000000000000000000000`](https://explorer.testnet.arc.io/address/0x3600000000000000000000000000000000000000) |
+| **Network** | Arc Mainnet |
+| **Chain ID** | `5042` |
+| **Address** | [`0xd02bc329d5cfe93e841ea2c925520ef864621c4c`](https://explorer.arc.io/address/0xd02bc329d5cfe93e841ea2c925520ef864621c4c) |
+| **Deploy tx** | [`0x78fcb1fa...36b`](https://explorer.arc.io/tx/0x78fcb1fadb4d888c3f979a3ecee9dc093d2346c615cc1429b226d9b18e3b136b) |
+| **Deploy block** | `28,629,917` |
+| **Runtime SHA-256** | `e2ba445a...6d` (matches hardened artifact) |
+| **USDC (ERC-20)** | [`0x3600000000000000000000000000000000000000`](https://explorer.arc.io/address/0x3600000000000000000000000000000000000000) |
 | **Solidity** | `0.8.28` (fixed, auto-detect off) |
-| **License** | MIT (SPDX identifier in contract source) |
+| **License** | MIT |
 | **Upgradeable** | No |
 | **Admin / owner** | None |
 | **Platform fee** | None |
-| **Arc Mainnet** | Not yet deployed |
+| **Independent audit** | Not completed — unaudited pilot only |
+
+### Arc Testnet (preserved)
+
+| Property | Value |
+|---|---|
+| **Address** | [`0x0fe8a41346ab7aa30dc183384a85b5e36051713c`](https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c) |
+| **Chain ID** | `5042002` |
+| **Notes** | Original deployment, preserved for backwards compatibility |
 
 ---
 
@@ -170,26 +186,27 @@ bun run check     # runs oxlint + tsc --noEmit
 ### Run all tests
 
 ```bash
-bun test                 # 146 JS/TS unit tests across 4 test files
-bun run contracts:test   # 16 Foundry unit tests for SessionSplit.sol
+bun test                 # 193 JS/TS unit tests across 5 test files
+bun run contracts:test   # 29 Foundry unit + hardening tests for SessionSplit.sol
 ```
 
 ---
 
 ## Testing and security
 
-### Automated tests (verified 2026-10-27)
+### Automated tests (verified 2026-10-30)
 
 | Suite | File | Tests | Result |
 |---|---|---|---|
-| Solidity contract | `contracts/test/SessionSplit.t.sol` | 16 | Pass |
+| Solidity contract + hardening | `contracts/test/SessionSplit.t.sol` | 29 | Pass |
 | USDC formatting | `src/utils/format.test.ts` | 45 | Pass |
 | Event ID extraction | `src/utils/eventId.test.ts` | 13 | Pass |
 | Session decode | `src/utils/sessionDecode.test.ts` | 66 | Pass |
-| UX regression | `src/utils/uxCleanup.test.ts` | 26 | Pass |
-| **Total** | | **162** | **Pass** |
+| UX regression | `src/utils/uxCleanup.test.ts` | 22 | Pass |
+| Contract guard | `src/utils/contractGuard.test.ts` | 47 | Pass |
+| **Total** | | **222** | **Pass** |
 
-The Foundry tests cover all contract failure modes: unauthorized access, duplicate recipients, reward budget overflow, deadline enforcement (both directions), reentrancy via state machine, partial-participant payouts, zero-address inputs, and repeated settlement attempts.
+The Foundry suite (29 tests, including 256-run fuzz) covers all contract failure modes: unauthorized access, duplicate recipients, reward budget overflow, deadline enforcement (both directions), reentrancy via state machine, partial-participant payouts, zero-address and contract-address inputs, mid-settlement atomicity, and repeated settlement and refund attempts. Coverage on `SessionSplit.sol` is 100% lines, statements, branches, and functions.
 
 ### What the contract guarantees
 
@@ -216,7 +233,9 @@ The application is deployed to Vercel at [seshpay.vercel.app](https://seshpay.ve
 
 For Netlify: `public/_redirects` contains `/* /index.html 200`.
 
-**Arc Mainnet has not been deployed.** The `MAINNET_ADDRESS` field in `src/contracts/sessionSplit.ts` is intentionally empty. Setting `VITE_NETWORK=mainnet` in a build without populating that field will cause the app to throw a descriptive error at startup rather than silently connecting to the wrong contract.
+The production Vercel deployment targets Arc Testnet by default (`VITE_NETWORK` unset). To switch to the mainnet pilot, set `VITE_NETWORK=mainnet` in the Vercel project's environment variables and redeploy. The mainnet contract address (`0xd02bc329d5cfe93e841ea2c925520ef864621c4c`) is already recorded in `src/contracts/sessionSplit.ts` — no source change is needed.
+
+The mainnet build is an **unaudited pilot**. The unaudited-pilot banner and five-checkbox risk acknowledgement are shown automatically on every page when `VITE_NETWORK=mainnet`.
 
 ---
 
@@ -262,7 +281,7 @@ The following are design proposals and are **not implemented in V1**. See [`docs
 - **Host-submitted evidence** — structured IPFS-pinned completion evidence with on-chain hash commitments
 - **Dispute protection** — pre-agreed reviewer workflow with bonded arbitration and timeout rules
 - **Batch payouts** — settle multiple events in a single transaction
-- **Arc Mainnet deployment** — pending an independent security audit
+- **Arc Mainnet production launch** — pending an independent professional security audit (current deployment is an unaudited pilot only)
 - **WalletConnect / mobile wallets** — currently only injected wallets are supported
 - **Backend event indexer** — replace the 50-session scan cap with a full log-based history
 

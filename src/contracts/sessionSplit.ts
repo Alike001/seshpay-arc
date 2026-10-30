@@ -2,13 +2,17 @@ import artifact from "../../contracts/out/SessionSplit.sol/SessionSplit.json";
 import { IS_MAINNET } from "@/config";
 
 // ── Deployed contract addresses ───────────────────────────────────────────────
-// Testnet address is the live Arc Testnet deployment.
-// Mainnet address is intentionally empty — it must not be populated until an
-// independently reviewed deployment to Arc Mainnet has actually occurred.
+// TESTNET_ADDRESS: live Arc Testnet deployment (preserved, do not change).
+// MAINNET_ADDRESS: verified Arc Mainnet deployment (2026-10-30).
+//   Chain ID: 5042 | Deploy tx: 0x78fcb1fadb4d888c3f979a3ecee9dc093d2346c615cc1429b226d9b18e3b136b
+//   Block: 28629917 | Runtime SHA-256: e2ba445af6cb74d98bb791c1f3ef3aad27ed8291ffc2f6298e4e20202ae6c46d
+//   Bytecode matches hardened release artifact exactly (ContractAddress() guards included).
+//   This is an unaudited mainnet pilot — no independent professional audit has been completed.
 const TESTNET_ADDRESS = "0x0fe8a41346ab7aa30dc183384a85b5e36051713c" as const;
-const MAINNET_ADDRESS = "" as const; // ← fill in after mainnet deployment
+const MAINNET_ADDRESS = "0xd02bc329d5cfe93e841ea2c925520ef864621c4c" as const;
 
-// Guard: the mainnet build must fail loudly if the address is not set.
+// Guard retained for safety: will never fire in practice now that MAINNET_ADDRESS is set,
+// but protects against accidental erasure of the address in a future edit.
 if (IS_MAINNET && !MAINNET_ADDRESS) {
   throw new Error(
     "[SeshPay] VITE_NETWORK=mainnet is set but the mainnet contract address " +

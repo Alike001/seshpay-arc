@@ -4,8 +4,20 @@
 
 | Contract | Network | Address | Explorer | Notes |
 |---|---|---|---|---|
+| SessionSplit (hardened, MAINNET PILOT) | Arc Mainnet | 0xd02bc329d5cfe93e841ea2c925520ef864621c4c | https://explorer.arc.io/address/0xd02bc329d5cfe93e841ea2c925520ef864621c4c | Deployed 2026-10-30, unaudited pilot, bytecode matches hardened artifact |
 | SessionSplit (hardened, RC) | Arc Testnet | 0x27624bae0446d678f0aaa64b7d44615c9a24db8c | https://explorer.testnet.arc.io/address/0x27624bae0446d678f0aaa64b7d44615c9a24db8c | Deployed 2026-10-29, main b7c3bf3, includes ContractAddress() guards |
 | SessionSplit (original) | Arc Testnet | 0x0fe8a41346ab7aa30dc183384a85b5e36051713c | https://explorer.testnet.arc.io/address/0x0fe8a41346ab7aa30dc183384a85b5e36051713c | Deployed 2026-10-24, pre-hardening, preserved for backwards compat |
+
+## Mainnet pilot deployment (2026-10-30)
+- Address: 0xd02bc329d5cfe93e841ea2c925520ef864621c4c
+- Deploy tx: 0x78fcb1fadb4d888c3f979a3ecee9dc093d2346c615cc1429b226d9b18e3b136b
+- Block: 28629917 | Chain ID: 5042 (Arc Mainnet)
+- Runtime SHA-256 (eth_getCode): e2ba445af6cb74d98bb791c1f3ef3aad27ed8291ffc2f6298e4e20202ae6c46d
+- Bytecode: EXACT MATCH against hardened release artifact (ContractAddress() guards included)
+- nextSessionId: 1 (verified live, no events yet)
+- usdc(): 0x3600000000000000000000000000000000000000 (correct)
+- IMPORTANT: Unaudited pilot — no independent professional security audit completed
+- MAINNET_ADDRESS set in src/contracts/sessionSplit.ts as of commit on 2026-10-30
 
 ## Hardened RC deployment (2026-10-29)
 - Address: 0x27624bae0446d678f0aaa64b7d44615c9a24db8c
@@ -120,9 +132,9 @@ Safe fixes applied (no contract/ABI changes, no financial logic changes):
    These guards fix ReferenceError: window is not defined in bun test runner when any file
    transitively imports tracing.ts through the import chain.
 
-Mainnet contract address: NOT YET DEPLOYED. Populate MAINNET_ADDRESS in src/contracts/sessionSplit.ts
-after an independently reviewed deployment to Arc Mainnet (chainId 5042) has been executed per
-the runbook in docs/mainnet-release-audit.md.
+Mainnet contract address: 0xd02bc329d5cfe93e841ea2c925520ef864621c4c (Arc Mainnet, chainId 5042).
+MAINNET_ADDRESS is now set in src/contracts/sessionSplit.ts. This is an unaudited pilot deployment.
+An independent professional security audit remains a prerequisite for a broader production launch.
 
 Current test counts (confirmed 2026-10-26):
   Foundry: 16/16 pass
