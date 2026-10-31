@@ -194,6 +194,9 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   function handleApprove() {
+    // Code-level guard — acknowledgement must be done before any financial action.
+    // Mirrors the disabled state on the button but cannot be bypassed by DOM manipulation.
+    if (IS_MAINNET && !ackDone) return;
     if (wrongChain) { switchChain({ chainId: ACTIVE_CHAIN_ID }); return; }
     resetApprove();
     approve({
@@ -205,6 +208,8 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
   }
 
   function handleCreate() {
+    // Code-level guard — acknowledgement must be done before any financial action.
+    if (IS_MAINNET && !ackDone) return;
     if (wrongChain) { switchChain({ chainId: ACTIVE_CHAIN_ID }); return; }
     createSession({
       address: SESSION_SPLIT.address,
@@ -359,12 +364,6 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
 
   // ── Form ───────────────────────────────────────────────────────────────────
   return (
-    <>
-      {/* Mainnet risk acknowledgement modal — shown once per session on mainnet */}
-      {IS_MAINNET && !ackDone && (
-        <MainnetAckModal onAcknowledged={() => setAckDone(true)} />
-      )}
-
     <div className="rounded-3xl p-6" style={glass.card}>
       <div className="h-1 w-10 rounded-full mb-5"
         style={{ background: "linear-gradient(90deg,#c4a7e2,#9fc4e8)" }} />
@@ -517,7 +516,9 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
                 <AlertTriangle className="size-3 mt-0.5 flex-shrink-0"
                   style={{ color: "var(--danger)" }} />
                 <span className="text-xs" style={{ color: "var(--danger)" }}>
-                  Insufficient USDC. Use "Get test USDC" in the sidebar to top up.
+                  {IS_MAINNET
+                    ? "Insufficient USDC. Add real USDC to your wallet before continuing."
+                    : "Insufficient USDC. Use \"Get test USDC\" in the sidebar to top up."}
                 </span>
               </div>
             )}
@@ -549,12 +550,20 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
           </p>
         )}
 
+        {/* Mainnet: inline risk disclosure — guards both approve and create,
+            including the case where existing allowance is already sufficient
+            (approveSuccess=true immediately, which would skip the Step 1 block).
+            Frontend guidance only — does not prevent direct contract calls. */}
+        {IS_MAINNET && !ackDone && (
+          <MainnetAckModal onAcknowledged={() => setAckDone(true)} />
+        )}
+
         {/* Step 1: Allow spend — hidden if allowance already sufficient */}
         {!approveSuccess && (
           <div className="space-y-2">
             <button
               onClick={handleApprove}
-              disabled={!isConnected || !isValid || approving || approveConfirming}
+              disabled={!isConnected || !isValid || approving || approveConfirming || (IS_MAINNET && !ackDone)}
               className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
               style={{ background: "var(--accent)" }}
               aria-live="polite"
@@ -607,7 +616,7 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
             </div>
             <button
               onClick={handleCreate}
-              disabled={!isValid || creating || createConfirming}
+              disabled={!isValid || creating || createConfirming || (IS_MAINNET && !ackDone)}
               className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
               style={{ background: "var(--accent)" }}
               aria-live="polite"
@@ -631,6 +640,5 @@ export default function CreateSession({ onCreated }: { onCreated: () => void }) 
         )}
       </div>
     </div>
-    </>
   );
 }

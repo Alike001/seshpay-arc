@@ -385,7 +385,7 @@ export default function EventDetail() {
         />
         <Row
           label="Contract"
-          value="0x0fe8…713c"
+          value={`${SESSION_SPLIT.address.slice(0, 6)}…${SESSION_SPLIT.address.slice(-4)}`}
           href={CONTRACT_EXPLORER}
           mono
         />
@@ -476,7 +476,7 @@ export default function EventDetail() {
       {/* ArcScan explorer link */}
       <div className="mt-3 flex justify-center">
         <a
-          href={`https://explorer.testnet.arc.io/address/${SESSION_SPLIT.address}`}
+          href={CONTRACT_EXPLORER}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 text-xs font-semibold"

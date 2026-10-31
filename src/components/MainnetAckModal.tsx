@@ -1,32 +1,42 @@
 /**
- * MainnetAckModal
+ * MainnetRiskDisclosure (exported as MainnetAckModal for import compatibility)
  *
- * Shown once per browser session before the first createSession form
- * interaction on mainnet. The user must check all boxes and click
- * "I understand — proceed" before the form becomes interactive.
+ * Inline risk acknowledgement rendered inside the Create Event form, just
+ * above the first financial action button. Does NOT block browsing, reading
+ * event details, or navigating the app — judges and visitors can explore
+ * everything freely.
  *
- * This is frontend guidance only. It does not prevent direct contract
- * calls and does not constitute an onchain limit on deposit size.
+ * Security guarantees:
+ *  - One checkbox + CTA must be completed before approve or create fires.
+ *  - handleApprove() and handleCreate() have code-level early-return guards
+ *    (not only disabled button styling).
+ *  - The five substantive risk statements are accessible via "Read all risks".
+ *  - Stored in sessionStorage — one acknowledgement per browser session.
  *
- * The acknowledgement is stored in sessionStorage so it persists across
- * tab refreshes within one session but resets when the browser closes.
+ * This is frontend guidance only. It does not prevent direct contract calls
+ * and does not constitute an onchain limit on deposit size.
  */
 import { useState, useEffect } from "react";
-import { AlertTriangle, ShieldAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, ShieldAlert } from "lucide-react";
 
 const STORAGE_KEY = "seshpay_mainnet_ack_v1";
 
 interface Props {
-  /** Called when the user confirms all boxes and clicks proceed. */
+  /** Called when the user checks the box and clicks proceed. */
   onAcknowledged: () => void;
 }
 
+/**
+ * The five substantive risk statements — unchanged from the previous modal.
+ * All remain accessible in the expandable panel; only the interaction pattern
+ * has changed (expandable list vs five forced checkboxes).
+ */
 const RISKS = [
-  "This contract has not been reviewed by an independent security firm. Real USDC may be lost if the contract contains undiscovered bugs.",
-  "Sponsor approval is discretionary. The host and contributors have no recourse inside the contract if the sponsor does not settle before the deadline.",
-  "If Circle restricts a recipient address, any transfer to that address will revert the entire settlement or refund transaction, locking all funds indefinitely, potentially permanently.",
+  "This contract has not been reviewed by an independent security firm. Real USDC may be lost if it contains undiscovered bugs.",
+  "Sponsor approval is discretionary. Hosts and contributors have no recourse inside the contract if the sponsor does not settle before the deadline.",
+  "If Circle restricts a recipient address, any transfer to that address reverts the entire settlement or refund, locking all funds indefinitely, potentially permanently.",
   "Any suggested deposit limit is frontend guidance only, not an onchain restriction. The contract accepts any amount the sponsor approves.",
-  "Blockchain transactions are irreversible. There is no undo once a transaction is confirmed.",
+  "Blockchain transactions are irreversible. There is no undo once confirmed.",
 ] as const;
 
 export function isMainnetAcknowledged(): boolean {
@@ -46,7 +56,8 @@ export function setMainnetAcknowledged(): void {
 }
 
 export default function MainnetAckModal({ onAcknowledged }: Props) {
-  const [checked, setChecked] = useState<boolean[]>(RISKS.map(() => false));
+  const [checked, setChecked] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   // If already acknowledged this session, call back immediately on mount.
   useEffect(() => {
@@ -54,143 +65,114 @@ export default function MainnetAckModal({ onAcknowledged }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const allChecked = checked.every(Boolean);
-
-  function toggle(i: number) {
-    setChecked((prev) => prev.map((v, idx) => (idx === i ? !v : v)));
-  }
-
   function handleProceed() {
-    if (!allChecked) return;
+    if (!checked) return;
     setMainnetAcknowledged();
     onAcknowledged();
   }
 
   return (
-    /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(18,45,69,0.55)", backdropFilter: "blur(6px)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="ack-modal-title"
+      className="rounded-2xl p-4 mb-4"
+      style={{
+        background: "rgba(16,97,166,0.04)",
+        border: "1px solid rgba(18,45,69,0.10)",
+      }}
+      role="group"
+      aria-labelledby="risk-disclosure-title"
     >
-      {/* Sheet */}
-      <div
-        className="w-full max-w-md rounded-3xl p-6 overflow-y-auto"
-        style={{
-          maxHeight: "calc(100dvh - 2rem)",
-          background: "rgba(255,255,255,0.97)",
-          border: "1px solid rgba(180,82,0,0.25)",
-          boxShadow: "0 24px 60px rgba(18,45,69,0.20)",
-        }}
-      >
-        {/* Icon + title */}
-        <div className="flex items-start gap-3 mb-4">
-          <div
-            className="size-9 rounded-xl flex-shrink-0 flex items-center justify-center"
-            style={{ background: "rgba(180,82,0,0.10)" }}
-          >
-            <ShieldAlert className="size-5" style={{ color: "#b45200" }} aria-hidden="true" />
-          </div>
-          <div>
-            <h2
-              id="ack-modal-title"
-              className="display text-base font-bold leading-snug"
-              style={{ color: "#7a3700" }}
-            >
-              Unaudited mainnet prototype
-            </h2>
-            <p className="text-xs mt-0.5" style={{ color: "#7a3700", opacity: 0.8 }}>
-              Read and confirm each risk before proceeding.
-            </p>
-          </div>
-        </div>
-
-        {/* Risk list */}
-        <div className="space-y-3 mb-5">
-          {RISKS.map((text, i) => (
-            <label
-              key={i}
-              className="flex items-start gap-3 cursor-pointer rounded-xl p-3 transition-colors"
-              style={{
-                background: checked[i]
-                  ? "rgba(180,82,0,0.06)"
-                  : "rgba(18,45,69,0.03)",
-                border: "1px solid",
-                borderColor: checked[i]
-                  ? "rgba(180,82,0,0.22)"
-                  : "rgba(18,45,69,0.08)",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={checked[i]}
-                onChange={() => toggle(i)}
-                className="mt-0.5 flex-shrink-0"
-                style={{ accentColor: "#b45200", width: 16, height: 16 }}
-                aria-label={`Acknowledge risk ${i + 1}`}
-              />
-              <span className="text-xs leading-relaxed" style={{ color: "var(--ink-2)" }}>
-                {text}
-              </span>
-            </label>
-          ))}
-        </div>
-
-        {/* Disclaimer line */}
+      {/* Header row */}
+      <div className="flex items-center gap-2 mb-3">
+        <ShieldAlert
+          className="size-3.5 flex-shrink-0"
+          style={{ color: "var(--accent-hover)" }}
+          aria-hidden="true"
+        />
         <p
-          className="text-xs mb-4 text-center text-pretty"
+          id="risk-disclosure-title"
+          className="text-xs font-semibold"
+          style={{ color: "var(--ink)" }}
+        >
+          Real USDC — unaudited beta
+        </p>
+        <a
+          href="https://github.com/Alike001/seshpay-arc/blob/main/SECURITY.md"
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto text-xs underline underline-offset-2 flex-shrink-0"
           style={{ color: "var(--muted)" }}
         >
-          This is an experimental pilot. Do not deposit funds you cannot afford to lose.
-          An independent professional audit is required before any broader production launch.
-        </p>
-
-        {/* CTA */}
-        <button
-          onClick={handleProceed}
-          disabled={!allChecked}
-          className="w-full rounded-2xl py-3 text-sm font-semibold transition-all focus-visible:outline focus-visible:outline-2"
-          style={{
-            background: allChecked ? "#b45200" : "rgba(18,45,69,0.08)",
-            color: allChecked ? "#fff" : "var(--muted)",
-            cursor: allChecked ? "pointer" : "not-allowed",
-            outlineColor: "#b45200",
-          }}
-          aria-disabled={!allChecked}
-        >
-          {allChecked
-            ? "I understand the risks — proceed"
-            : `Check all ${RISKS.length - checked.filter(Boolean).length} remaining item${RISKS.length - checked.filter(Boolean).length === 1 ? "" : "s"}`}
-        </button>
-
-        {/* Link to SECURITY.md */}
-        <p className="text-xs text-center mt-3" style={{ color: "var(--muted)" }}>
-          Full disclosure in{" "}
-          <a
-            href="https://github.com/Alike001/seshpay-arc/blob/main/SECURITY.md"
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-2"
-            style={{ color: "var(--accent-hover)" }}
-          >
-            SECURITY.md
-          </a>
-        </p>
-
-        {/* Non-production signal */}
-        <div
-          className="mt-4 flex items-center justify-center gap-1.5 rounded-xl py-2"
-          style={{ background: "rgba(180,82,0,0.06)", border: "1px solid rgba(180,82,0,0.12)" }}
-        >
-          <AlertTriangle className="size-3" style={{ color: "#b45200" }} aria-hidden="true" />
-          <span className="text-[10px] font-semibold uppercase tracking-widest"
-            style={{ color: "#b45200", letterSpacing: "0.10em" }}>
-            Not audited — not guaranteed safe
-          </span>
-        </div>
+          Full disclosure
+        </a>
       </div>
+
+      {/* Summary */}
+      <p className="text-xs text-pretty mb-3" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
+        This contract is unaudited. Real USDC can be lost due to bugs, sponsor
+        non-settlement, or USDC address restrictions that may lock funds
+        indefinitely.
+      </p>
+
+      {/* Expandable risk list */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-1.5 text-xs mb-3 focus-visible:outline focus-visible:outline-2 rounded"
+        style={{ color: "var(--accent-hover)", outlineColor: "var(--focus)" }}
+        aria-expanded={expanded}
+        aria-controls="risk-list"
+      >
+        {expanded
+          ? <ChevronUp className="size-3" aria-hidden="true" />
+          : <ChevronDown className="size-3" aria-hidden="true" />}
+        {expanded ? "Hide details" : "Read all risks"}
+      </button>
+
+      {expanded && (
+        <ol
+          id="risk-list"
+          className="space-y-1.5 mb-3 pl-4 list-decimal"
+          style={{ color: "var(--muted)" }}
+        >
+          {RISKS.map((text, i) => (
+            <li key={i} className="text-xs text-pretty" style={{ lineHeight: 1.6 }}>
+              {text}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {/* Single acknowledgement checkbox */}
+      <label className="flex items-start gap-2.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => setChecked(e.target.checked)}
+          className="mt-0.5 flex-shrink-0"
+          style={{ accentColor: "var(--accent)", width: 15, height: 15 }}
+          aria-label="I understand these risks and want to proceed"
+        />
+        <span className="text-xs leading-relaxed" style={{ color: "var(--ink-2)" }}>
+          I understand this contract is unaudited, transactions are irreversible,
+          and real USDC may be lost.
+        </span>
+      </label>
+
+      {/* Proceed button */}
+      <button
+        type="button"
+        onClick={handleProceed}
+        disabled={!checked}
+        className="mt-3 w-full rounded-xl py-2.5 text-xs font-semibold transition-all focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+        style={{
+          background: checked ? "var(--accent)" : "rgba(18,45,69,0.07)",
+          color: checked ? "#fff" : "var(--muted)",
+          outlineColor: "var(--focus)",
+        }}
+        aria-disabled={!checked}
+      >
+        {checked ? "Acknowledge and show funding form" : "Check the box above to continue"}
+      </button>
     </div>
   );
 }

@@ -1,44 +1,63 @@
 /**
- * MainnetPilotBanner
+ * MainnetNetworkChip (exported as MainnetPilotBanner for import compatibility)
  *
- * Shown at the top of every page when VITE_NETWORK=mainnet.
- * Discloses that SeshPay is an unaudited experimental prototype and that
- * real USDC may be lost. This banner is frontend guidance only — it does
- * not represent an onchain limit or a security guarantee.
+ * Compact "Arc Mainnet · Unaudited beta" status chip shown at the top of every
+ * page when VITE_NETWORK=mainnet. Provides a "View risks" link to the full
+ * disclosure in SECURITY.md without alarming visual treatment across the page.
+ *
+ * The full risk disclosure (fund-loss, sponsor discretion, USDC blacklisting,
+ * irreversibility) remains one click away — this component does not remove or
+ * reduce the substantive disclosure; it moves it out of the page's visual
+ * hierarchy so it does not dominate non-financial views.
+ *
+ * This is frontend guidance only — it does not represent an onchain limit
+ * or a security guarantee.
  */
-import { AlertTriangle } from "lucide-react";
 
 export default function MainnetPilotBanner() {
   return (
     <div
-      role="alert"
-      aria-label="Unaudited mainnet prototype warning"
-      className="w-full px-4 py-3"
+      className="w-full px-4 py-2 flex items-center justify-center gap-3"
       style={{
-        background: "rgba(180,82,0,0.10)",
-        borderBottom: "1px solid rgba(180,82,0,0.22)",
+        background: "rgba(16,97,166,0.05)",
+        borderBottom: "1px solid rgba(18,45,69,0.08)",
       }}
     >
-      <div className="mx-auto max-w-xl flex items-start gap-3">
-        <AlertTriangle
-          className="size-4 flex-shrink-0 mt-0.5"
-          style={{ color: "#b45200" }}
-          aria-hidden="true"
-        />
-        <div className="min-w-0">
-          <p className="text-xs font-semibold" style={{ color: "#7a3700" }}>
-            Unaudited mainnet prototype — experimental pilot only
-          </p>
-          <p className="text-xs mt-0.5 text-pretty" style={{ color: "#7a3700", opacity: 0.85 }}>
-            This contract has not been reviewed by an independent security firm.
-            Real USDC may be lost. Sponsor approval is discretionary — hosts and
-            contributors have no recourse if the sponsor does not settle before
-            the deadline. Restricted USDC transfers can lock funds indefinitely,
-            potentially permanently.
-            Do not deposit more than you can afford to lose.
-          </p>
-        </div>
-      </div>
+      {/* Live dot */}
+      <span
+        className="size-1.5 rounded-full flex-shrink-0"
+        style={{ background: "var(--accent-hover)" }}
+        aria-hidden="true"
+      />
+
+      {/* Network label */}
+      <span className="text-xs font-semibold" style={{ color: "var(--accent-hover)" }}>
+        Arc Mainnet
+      </span>
+
+      {/* Divider + status */}
+      <span
+        className="text-xs"
+        style={{
+          color: "var(--muted)",
+          borderLeft: "1px solid rgba(18,45,69,0.14)",
+          paddingLeft: "0.75rem",
+        }}
+      >
+        Unaudited beta
+      </span>
+
+      {/* View risks link */}
+      <a
+        href="https://github.com/Alike001/seshpay-arc/blob/main/SECURITY.md"
+        target="_blank"
+        rel="noreferrer"
+        className="text-xs underline underline-offset-2 flex-shrink-0"
+        style={{ color: "var(--muted)" }}
+        aria-label="View full risk disclosure in SECURITY.md"
+      >
+        View risks
+      </a>
     </div>
   );
 }
