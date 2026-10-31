@@ -601,8 +601,17 @@ export default function LandingPage() {
 
           {/* Disclaimer */}
           {IS_MAINNET ? (
-            <p className="text-xs font-semibold" style={{ color: "#b45200" }}>
-              Unaudited mainnet pilot — use at your own risk.
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Arc Mainnet Beta.{" "}
+              <a
+                href="https://github.com/Alike001/seshpay-arc/blob/main/SECURITY.md"
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2"
+              >
+                Security disclosure
+              </a>
+              .
             </p>
           ) : (
             <p className="text-xs" style={{ color: "var(--subtle)" }}>

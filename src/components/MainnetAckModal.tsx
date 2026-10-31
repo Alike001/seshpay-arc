@@ -93,7 +93,7 @@ export default function MainnetAckModal({ onAcknowledged }: Props) {
           className="text-xs font-semibold"
           style={{ color: "var(--ink)" }}
         >
-          Real USDC — unaudited beta
+          Security disclosure
         </p>
         <a
           href="https://github.com/Alike001/seshpay-arc/blob/main/SECURITY.md"
@@ -102,15 +102,15 @@ export default function MainnetAckModal({ onAcknowledged }: Props) {
           className="ml-auto text-xs underline underline-offset-2 flex-shrink-0"
           style={{ color: "var(--muted)" }}
         >
-          Full disclosure
+          Full details
         </a>
       </div>
 
       {/* Summary */}
       <p className="text-xs text-pretty mb-3" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-        This contract is unaudited. Real USDC can be lost due to bugs, sponsor
-        non-settlement, or USDC address restrictions that may lock funds
-        indefinitely.
+        This contract has not been independently audited. Real USDC can be lost
+        due to undiscovered bugs, sponsor non-settlement, or USDC address
+        restrictions that may lock funds indefinitely.
       </p>
 
       {/* Expandable risk list */}

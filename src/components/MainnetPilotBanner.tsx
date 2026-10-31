@@ -44,19 +44,19 @@ export default function MainnetPilotBanner() {
           paddingLeft: "0.75rem",
         }}
       >
-        Unaudited beta
+        Beta
       </span>
 
-      {/* View risks link */}
+      {/* View security link */}
       <a
         href="https://github.com/Alike001/seshpay-arc/blob/main/SECURITY.md"
         target="_blank"
         rel="noreferrer"
         className="text-xs underline underline-offset-2 flex-shrink-0"
         style={{ color: "var(--muted)" }}
-        aria-label="View full risk disclosure in SECURITY.md"
+        aria-label="View full security disclosure in SECURITY.md"
       >
-        View risks
+        View security
       </a>
     </div>
   );
